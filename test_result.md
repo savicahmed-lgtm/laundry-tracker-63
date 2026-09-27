@@ -115,7 +115,52 @@
 ##     status_history:
 ##         -working: true
 ##         -agent: "main"
-##         -comment: "Repo sudah ter-clone di /app (origin=laundry-tracker-63). pip install -r requirements.txt sukses (all satisfied). Backend RUNNING, GET /api/ -> {app: Loundry Suci, status: ok}, login admin 081200000000/admin123 mengembalikan JWT."
+##         -comment: "Repo sudah ter-clone di /app (origin=laundry-tracker-63). pip install sukses. Backend RUNNING."
+##   - task: "Role-based status flow (5 roles) + scan endpoint"
+##     implemented: true
+##     working: true
+##     file: "backend/server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "ROLE_CAN_SET diperbarui: admin_cabang hanya boleh set 'siap' (bukan lagi selesai). admin_cuci->dicuci, admin_setrika->disetrika, admin_antar->selesai (pickup saja). Endpoint POST /orders/scan cari by code. Perlu test: tiap role hanya bisa set status yang diizinkan & berurutan; role lain ditolak 403."
+##         -working: false
+##         -agent: "testing"
+##         -comment: "TESTED: Role enforcement mostly working correctly. All role restrictions pass (admin_cuci can only set dicuci, admin_setrika only disetrika, admin_cabang only siap). Sequential status validation works (400 'Status harus berurutan'). Scan endpoint works (valid code returns order, unknown code 404, empty code 422). CRITICAL ISSUE: admin_antar can set 'selesai' on BRANCH orders, but per requirements should only work for PICKUP orders. Branch orders should close via customer/auto only. Need to add service type check in update_status endpoint (line 598-617) to restrict admin_antar's selesai permission to pickup orders only."
+##         -working: true
+##         -agent: "main"
+##         -comment: "FIXED: added check in update_status - admin_antar setting 'selesai' on non-pickup order now raises 403. Verified via curl: branch order at 'siap', kurir->selesai returns 403 'Kurir hanya dapat menyelesaikan pesanan antar-jemput'."
+##   - task: "Confirm-received + auto-complete 24h"
+##     implemented: true
+##     working: true
+##     file: "backend/server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "POST /orders/{id}/confirm-received: pelanggan menandai selesai saat status 'siap'. maybe_autocomplete: order service=branch status=siap > 24 jam auto jadi selesai (lazy check di GET orders & GET order). Perlu test confirm-received (owner only, status harus siap)."
+##         -working: true
+##         -agent: "testing"
+##         -comment: "TESTED: Confirm-received endpoint working correctly. Owner validation works (403 for non-owner). Status validation works (400 when status is not 'siap'). Successfully sets status to 'selesai' and selesai_at timestamp when called by owner on 'siap' order. Auto-complete logic not tested (requires 24h wait), but implementation looks correct in maybe_autocomplete function."
+##   - task: "Rewash / complaint endpoint"
+##     implemented: true
+##     working: true
+##     file: "backend/server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "POST /orders/{id}/rewash: body {reason, photos[]}. Hanya owner, status harus siap/selesai. Set status balik ke 'dicuci', simpan complaints[], rewash_count++, rewash_active=true, reset rating. order_public kini punya complaints, rewash_count, rewash_active, selesai_at, auto_completed."
+##         -working: true
+##         -agent: "testing"
+##         -comment: "TESTED: Rewash endpoint working perfectly. Owner validation works (403 for non-owner). Status validation works (400 when status is not siap/selesai). Successfully reverts status to 'dicuci', adds complaint to complaints array, increments rewash_count, sets rewash_active=true, resets rating to null. Flow can continue after rewash - admin_setrika can set disetrika again. All requirements met."
 
 ## frontend:
 ##   - task: "Install frontend dependencies + verify Expo preview"
@@ -128,20 +173,34 @@
 ##     status_history:
 ##         -working: true
 ##         -agent: "main"
-##         -comment: "yarn install sukses (577+ packages, hanya peer warnings). Expo RUNNING, preview URL HTTP 200, screenshot menunjukkan halaman login Loundry Suci render sempurna."
+##         -comment: "yarn install sukses. Expo RUNNING, preview HTTP 200."
+##   - task: "Login redirect semua role admin + dashboard per-peran + scan + item input + QR + rewash UI"
+##     implemented: true
+##     working: "NA"
+##     file: "frontend/app/login.tsx, frontend/app/admin/index.tsx, frontend/app/admin/scan.tsx, frontend/app/admin/items/[id].tsx, frontend/app/order/[id].tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Frontend belum ditest (menunggu izin user). Login kini arahkan semua role admin ke /admin. Dashboard admin punya tombol Scan untuk role cuci/setrika/kurir, tombol Input Item utk cabang, badge cuci ulang. Layar scan pakai expo-camera + input manual. QR code order.code di detail. Pelanggan: konfirmasi diterima + ajukan cuci ulang (alasan+foto)."
 
 ## metadata:
 ##   created_by: "main_agent"
-##   version: "1.0"
-##   test_sequence: 0
+##   version: "1.2"
+##   test_sequence: 2
 ##   run_ui: false
 
 ## test_plan:
-##   current_focus: []
+##   current_focus:
+##     - "Role-based status flow (5 roles) + scan endpoint"
 ##   stuck_tasks: []
 ##   test_all: false
 ##   test_priority: "high_first"
 
 ## agent_communication:
 ##     -agent: "main"
-##     -message: "Import & setup selesai. Kredensial ada di /app/memory/test_credentials.md. Tidak ada perubahan kode - hanya instalasi dependencies dan restart service. Menunggu instruksi user untuk task berikutnya."
+##     -message: "Menambahkan alur 5 peran + scan QR + cuci ulang. Tolong test BACKEND saja dulu. Kredensial di /app/memory/test_credentials.md. Skenario kunci: (1) buat order sbg customer 081211112222; (2) admin_cabang input items via PATCH /orders/{id}/items lalu customer bayar; (3) admin_cuci set dicuci, admin_setrika set disetrika, admin_cabang set siap; (4) test confirm-received utk branch order & rewash (status balik dicuci); (5) pastikan role salah ditolak 403 & status harus berurutan."
+##     -agent: "testing"
+##     -message: "Backend testing completed. RESULTS: ✅ Confirm-received working (owner only, status must be siap). ✅ Rewash working (reverts to dicuci, adds complaints, increments rewash_count, resets rating). ✅ Scan endpoint working (valid/unknown/empty codes). ✅ Role enforcement mostly working (all role restrictions pass, sequential validation works). ❌ CRITICAL ISSUE: admin_antar can set 'selesai' on BRANCH orders but should only work for PICKUP orders. Fix needed in update_status endpoint (line 598-617): add check 'if admin['role'] == 'admin_antar' and body.status == 'selesai' and o['service'] != 'pickup': raise 403'. All other tests pass."

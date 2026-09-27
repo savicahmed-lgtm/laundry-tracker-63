@@ -47,6 +47,10 @@ export const api = {
     request(`/orders/${id}/pay`, { method: "POST", body: JSON.stringify({ use_points: usePoints }) }),
   setStatus: (id: string, statusValue: string) =>
     request(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: statusValue }) }),
+  confirmReceived: (id: string) =>
+    request(`/orders/${id}/confirm-received`, { method: "POST" }),
+  rewash: (id: string, body: { reason: string; photos: string[] }) =>
+    request(`/orders/${id}/rewash`, { method: "POST", body: JSON.stringify(body) }),
   courier: (id: string) => request(`/orders/${id}/courier`),
   feedback: (id: string, body: { rating: number; comment: string }) =>
     request(`/orders/${id}/feedback`, { method: "POST", body: JSON.stringify(body) }),

@@ -49,3 +49,15 @@ Aplikasi mobile "Loundry Suci" (layanan laundry Indonesia). Login pakai nomor HP
 
 ## Notes
 - Native maps (react-native-maps) butuh dev/production build untuk render penuh; web preview memakai peta simulasi.
+
+## Update (2026-09) — Alur 5 Peran + Scan QR + Cuci Ulang
+- Login: semua role admin (cabang/cuci/setrika/kurir/super) diarahkan ke dashboard admin.
+- Peran & aksi:
+  - Admin Cabang: input item & timbang (layar /admin/items/[id]) + tandai "siap".
+  - Admin Cuci: scan QR -> "dicuci". Admin Setrika: scan QR -> "disetrika". Admin Kurir: scan QR -> "selesai" (khusus pesanan antar-jemput).
+- Layar Scan (/admin/scan): expo-camera QR + input kode manual (fallback web). Scan otomatis memvalidasi tahap & memajukan status.
+- QR pesanan (order.code SUCI-XXXXXX) ditampilkan di layar detail pesanan (react-native-qrcode-svg).
+- Pelanggan: tombol "Konfirmasi Pesanan Diterima" saat status "siap"; pesanan cabang auto-selesai 24 jam setelah siap.
+- Cuci ulang / komplain: pelanggan ajukan alasan + foto bukti -> status kembali ke "dicuci", tercatat di complaints[] & badge di dashboard admin.
+- Backend endpoints baru: POST /orders/{id}/confirm-received, POST /orders/{id}/rewash. update_status kini blokir kurir menyelesaikan pesanan non-pickup.
+- Verified: backend tests lolos (role enforcement, scan, confirm-received, rewash) + verifikasi UI (dashboard peran, scan manual success, QR render, konfirmasi diterima).

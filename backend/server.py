@@ -133,13 +133,19 @@ ROLE_LABEL = {
     "customer": "Pelanggan",
 }
 # Target status each role is allowed to set (the transition INTO that status).
+# Flow: Cabang input item -> Pelanggan bayar -> Cuci scan (dicuci) ->
+#       Setrika scan (disetrika) -> Cabang tandai siap -> Kurir scan (selesai).
 ROLE_CAN_SET = {
     "admin": {"dicuci", "disetrika", "siap", "selesai"},
     "admin_cuci": {"dicuci"},
     "admin_setrika": {"disetrika"},
-    "admin_cabang": {"siap", "selesai"},
+    "admin_cabang": {"siap"},
     "admin_antar": {"selesai"},
 }
+# Roles that verify a step by scanning the order QR code.
+SCAN_ROLES = {"admin_cuci", "admin_setrika", "admin_antar"}
+# Hours after which a branch drop-off order auto-completes once "siap".
+AUTO_COMPLETE_HOURS = 24
 ITEM_INPUT_ROLES = {"admin", "admin_cabang"}
 
 
@@ -200,6 +206,11 @@ class StatusUpdate(BaseModel):
 class FeedbackIn(BaseModel):
     rating: int = Field(ge=1, le=5)
     comment: str = Field(default="", max_length=500)
+
+
+class RewashIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    photos: List[str] = []
 
 
 # --------------------------------------------------------------------------- #
@@ -312,9 +323,14 @@ def order_public(o: dict) -> dict:
         "rating": o.get("rating"),
         "comment": o.get("comment"),
         "photos": o.get("photos", []),
+        "complaints": o.get("complaints", []),
+        "rewash_count": o.get("rewash_count", 0),
+        "rewash_active": o.get("rewash_active", False),
+        "auto_completed": o.get("auto_completed", False),
         "estimated_ready_at": iso(o.get("estimated_ready_at")),
         "created_at": iso(o.get("created_at")),
         "siap_at": iso(o.get("siap_at")),
+        "selesai_at": iso(o.get("selesai_at")),
         "branch": branch,
         "destination": o.get("destination", destination_for(o["id"])),
     }
@@ -330,6 +346,25 @@ def compute_pricing(items: list, weight_kg: float, treatment: str) -> dict:
     subtotal = satuan_total + kiloan_total
     points_earned = int(round(weight_kg))
     return {"subtotal": subtotal, "points_earned": points_earned}
+
+
+async def maybe_autocomplete(o: dict) -> dict:
+    """Branch drop-off orders auto-complete AUTO_COMPLETE_HOURS after they are ready."""
+    if o.get("status") == "siap" and o.get("service") == "branch" and o.get("siap_at"):
+        siap = o["siap_at"]
+        if isinstance(siap, str):
+            siap = datetime.fromisoformat(siap)
+        if siap.tzinfo is None:
+            siap = siap.replace(tzinfo=timezone.utc)
+        if (now_utc() - siap) >= timedelta(hours=AUTO_COMPLETE_HOURS):
+            await db.orders.update_one(
+                {"id": o["id"]},
+                {"$set": {"status": "selesai", "selesai_at": now_utc(), "auto_completed": True}},
+            )
+            o["status"] = "selesai"
+            o["selesai_at"] = now_utc()
+            o["auto_completed"] = True
+    return o
 
 
 # --------------------------------------------------------------------------- #
@@ -482,6 +517,7 @@ async def set_items(order_id: str, body: OrderItemsUpdate, admin: dict = Depends
 async def list_orders(user: dict = Depends(get_current_user)):
     query = {} if is_admin(user) else {"customer_id": user["id"]}
     docs = await db.orders.find(query).sort("created_at", -1).to_list(500)
+    docs = [await maybe_autocomplete(d) for d in docs]
     return [order_public(d) for d in docs]
 
 
@@ -503,6 +539,7 @@ async def get_order(order_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     if not is_admin(user) and o["customer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Bukan pesanan Anda")
+    o = await maybe_autocomplete(o)
     return order_public(o)
 
 
@@ -565,6 +602,8 @@ async def update_status(order_id: str, body: StatusUpdate, admin: dict = Depends
         raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
     if body.status not in ROLE_CAN_SET.get(admin["role"], set()):
         raise HTTPException(status_code=403, detail="Peran Anda tidak dapat menandai status ini")
+    if admin["role"] == "admin_antar" and body.status == "selesai" and o.get("service") != "pickup":
+        raise HTTPException(status_code=403, detail="Kurir hanya dapat menyelesaikan pesanan antar-jemput")
     cur = STATUS_FLOW.index(o["status"])
     nxt = STATUS_FLOW.index(body.status)
     if nxt != cur + 1:
@@ -572,7 +611,64 @@ async def update_status(order_id: str, body: StatusUpdate, admin: dict = Depends
     upd = {"status": body.status}
     if body.status == "siap":
         upd["siap_at"] = now_utc()
+    if body.status == "selesai":
+        upd["selesai_at"] = now_utc()
+        upd["rewash_active"] = False
     await db.orders.update_one({"id": order_id}, {"$set": upd})
+    fresh = await db.orders.find_one({"id": order_id})
+    return order_public(fresh)
+
+
+@api.post("/orders/{order_id}/confirm-received")
+async def confirm_received(order_id: str, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": order_id})
+    if not o:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    if o["customer_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Bukan pesanan Anda")
+    if o["status"] != "siap":
+        raise HTTPException(status_code=400, detail="Pesanan belum siap diambil")
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {"status": "selesai", "selesai_at": now_utc(), "rewash_active": False}},
+    )
+    fresh = await db.orders.find_one({"id": order_id})
+    return order_public(fresh)
+
+
+@api.post("/orders/{order_id}/rewash")
+async def request_rewash(order_id: str, body: RewashIn, user: dict = Depends(get_current_user)):
+    o = await db.orders.find_one({"id": order_id})
+    if not o:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    if o["customer_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Bukan pesanan Anda")
+    if o["status"] not in {"siap", "selesai"}:
+        raise HTTPException(status_code=400, detail="Cuci ulang hanya untuk pesanan yang siap/selesai")
+    complaint = {
+        "id": str(uuid.uuid4()),
+        "reason": body.reason.strip(),
+        "photos": body.photos or [],
+        "from_status": o["status"],
+        "status": "diproses",
+        "created_at": now_utc(),
+    }
+    complaints = o.get("complaints", []) + [complaint]
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "status": "dicuci",
+            "complaints": complaints,
+            "rewash_count": o.get("rewash_count", 0) + 1,
+            "rewash_active": True,
+            "rating": None,
+            "comment": None,
+            "siap_at": None,
+            "selesai_at": None,
+            "auto_completed": False,
+            "estimated_ready_at": now_utc() + timedelta(hours=24),
+        }},
+    )
     fresh = await db.orders.find_one({"id": order_id})
     return order_public(fresh)
 

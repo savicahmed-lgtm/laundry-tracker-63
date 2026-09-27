@@ -8,7 +8,7 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
-import { STATUS_META, formatRp, statusIndex, nextStatus } from "@/src/format";
+import { STATUS_META, formatRp, statusIndex, adminAction, SCAN_ROLES } from "@/src/format";
 import { queryClient } from "@/src/query-client";
 import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
 
@@ -25,6 +25,8 @@ export default function AdminScreen() {
   const { user, logout } = useAuth();
   const toast = useToast();
   const [filter, setFilter] = useState("aktif");
+  const role = user?.role ?? "";
+  const isScanRole = SCAN_ROLES.includes(role);
 
   const ordersQ = useQuery({ queryKey: ["orders"], queryFn: api.orders, refetchInterval: 5000 });
 
@@ -48,13 +50,20 @@ export default function AdminScreen() {
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.hi}>Dashboard Admin</Text>
+          <Text style={styles.hi}>{user?.role_label ?? "Dashboard Admin"}</Text>
           <Text style={styles.name}>{user?.name}</Text>
         </View>
         <Pressable onPress={async () => { await logout(); router.replace("/login"); }} hitSlop={10} testID="admin-logout">
           <Ionicons name="log-out-outline" size={24} color={colors.error} />
         </Pressable>
       </View>
+
+      {isScanRole ? (
+        <Pressable style={styles.scanCta} onPress={() => router.push("/admin/scan")} testID="admin-scan-cta">
+          <Ionicons name="qr-code-outline" size={22} color={colors.onBrandPrimary} />
+          <Text style={styles.scanCtaText}>Scan QR Pesanan</Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
@@ -92,7 +101,7 @@ export default function AdminScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
             const meta = STATUS_META[item.status as keyof typeof STATUS_META];
-            const nxt = nextStatus(item.status);
+            const action = adminAction(role, item);
             const waitingPay = item.status === "diterima";
             return (
               <View style={styles.card} testID={`admin-order-${item.id}`}>
@@ -102,10 +111,17 @@ export default function AdminScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.custName}>{item.customer_name}</Text>
-                    <Text style={styles.custPhone}>{item.customer_phone} · #{item.id.slice(0, 6).toUpperCase()}</Text>
+                    <Text style={styles.custPhone}>{item.code} · {item.customer_phone}</Text>
                   </View>
                   <View style={styles.badge}><Text style={styles.badgeText}>{meta.label}</Text></View>
                 </Pressable>
+
+                {item.rewash_active ? (
+                  <View style={styles.rewashBadge}>
+                    <Ionicons name="refresh-circle" size={16} color={colors.error} />
+                    <Text style={styles.rewashText}>Cuci ulang (komplain pelanggan)</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.progressBar}>
                   {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -129,21 +145,44 @@ export default function AdminScreen() {
                   ) : (
                     <Text style={styles.noRating}>Selesai · belum ada ulasan</Text>
                   )
+                ) : action?.kind === "input" ? (
+                  <Pressable
+                    style={styles.advanceBtn}
+                    onPress={() => router.push(`/admin/items/${item.id}`)}
+                    testID={`input-${item.id}`}
+                  >
+                    <Ionicons name="create-outline" size={18} color={colors.onBrandPrimary} />
+                    <Text style={styles.advanceText}>Input Item & Timbang</Text>
+                  </Pressable>
+                ) : action?.kind === "status" && action.scan ? (
+                  <Pressable
+                    style={styles.advanceBtn}
+                    onPress={() => router.push("/admin/scan")}
+                    testID={`scan-${item.id}`}
+                  >
+                    <Ionicons name="qr-code-outline" size={18} color={colors.onBrandPrimary} />
+                    <Text style={styles.advanceText}>Scan untuk {action.label}</Text>
+                  </Pressable>
+                ) : action?.kind === "status" ? (
+                  <Pressable
+                    style={styles.advanceBtn}
+                    onPress={() => advance.mutate({ id: item.id, status: action.target })}
+                    testID={`advance-${item.id}`}
+                  >
+                    <Ionicons name="arrow-forward-circle" size={18} color={colors.onBrandPrimary} />
+                    <Text style={styles.advanceText}>Tandai: {action.label}</Text>
+                  </Pressable>
                 ) : waitingPay ? (
                   <View style={styles.waitPay}>
                     <Ionicons name="time-outline" size={16} color={colors.warning} />
                     <Text style={styles.waitPayText}>Menunggu pembayaran pelanggan</Text>
                   </View>
-                ) : nxt ? (
-                  <Pressable
-                    style={styles.advanceBtn}
-                    onPress={() => advance.mutate({ id: item.id, status: nxt })}
-                    testID={`advance-${item.id}`}
-                  >
-                    <Ionicons name="arrow-forward-circle" size={18} color={colors.onBrandPrimary} />
-                    <Text style={styles.advanceText}>Tandai: {STATUS_META[nxt].label}</Text>
-                  </Pressable>
-                ) : null}
+                ) : (
+                  <View style={styles.waitPay}>
+                    <Ionicons name="hourglass-outline" size={16} color={colors.muted} />
+                    <Text style={styles.waitPayText}>Sedang di tahap lain</Text>
+                  </View>
+                )}
               </View>
             );
           }}
@@ -156,6 +195,10 @@ export default function AdminScreen() {
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  scanCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, marginHorizontal: spacing.lg, marginBottom: spacing.md, borderRadius: radius.md, paddingVertical: spacing.md },
+  scanCtaText: { fontFamily: font.bold, fontSize: 15, color: colors.onBrandPrimary },
+  rewashBadge: { flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: "#FEE2E2", borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  rewashText: { fontFamily: font.semibold, fontSize: 12, color: colors.error },
   hi: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
   name: { fontFamily: font.bold, fontSize: 20, color: colors.onSurface },
   statsRow: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.md },

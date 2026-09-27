@@ -43,9 +43,22 @@ export const ROLE_CAN_SET: Record<string, string[]> = {
   admin: ["dicuci", "disetrika", "siap", "selesai"],
   admin_cuci: ["dicuci"],
   admin_setrika: ["disetrika"],
-  admin_cabang: ["siap", "selesai"],
+  admin_cabang: ["siap"],
   admin_antar: ["selesai"],
 };
+
+export const SCAN_ROLES = ["admin_cuci", "admin_setrika", "admin_antar"];
+export const ADMIN_ROLES = [
+  "admin",
+  "admin_cabang",
+  "admin_cuci",
+  "admin_setrika",
+  "admin_antar",
+];
+
+export function isAdminRole(role?: string | null): boolean {
+  return !!role && ADMIN_ROLES.includes(role);
+}
 
 export type AdminAction =
   | { kind: "input" }
@@ -55,6 +68,7 @@ export type AdminAction =
 // What the given admin role can do on this order right now.
 export function adminAction(role: string, order: any): AdminAction {
   if (!order) return null;
+  // Admin Cabang / Super Admin input & weigh items while the order awaits payment.
   if ((role === "admin" || role === "admin_cabang") && order.status === "diterima") {
     return { kind: "input" };
   }
@@ -62,12 +76,14 @@ export function adminAction(role: string, order: any): AdminAction {
   if (!target) return null;
   const allowed = ROLE_CAN_SET[role] ?? [];
   if (!allowed.includes(target)) return null;
-  // selesai routing: pickup delivered by admin_antar; branch pickup closed by admin_cabang.
-  if (target === "selesai") {
-    if (role === "admin_antar" && order.service !== "pickup") return null;
-    if (role === "admin_cabang" && order.service === "pickup") return null;
+  // Only the courier closes pickup orders; branch orders close via customer/auto.
+  if (target === "selesai" && role === "admin_antar" && order.service !== "pickup") {
+    return null;
   }
-  const scanRoles = ["admin_cuci", "admin_setrika", "admin_antar"];
-  const label = STATUS_META[target].label;
-  return { kind: "status", target, label, scan: scanRoles.includes(role) };
+  return {
+    kind: "status",
+    target,
+    label: STATUS_META[target].label,
+    scan: SCAN_ROLES.includes(role),
+  };
 }

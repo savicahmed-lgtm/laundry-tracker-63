@@ -10,6 +10,7 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
 import { Button } from "@/src/components/ui";
+import { isAdminRole } from "@/src/format";
 import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
 
 const HERO =
@@ -35,7 +36,7 @@ export default function LoginScreen() {
     try {
       const u = await login(phone.trim(), password);
       toast(`Selamat datang, ${u.name}`, "success");
-      router.replace(u.role === "admin" ? "/admin" : "/(tabs)");
+      router.replace(isAdminRole(u.role) ? "/admin" : "/(tabs)");
     } catch (e: any) {
       toast(e.message || "Gagal masuk", "error");
     } finally {
@@ -108,8 +109,13 @@ export default function LoginScreen() {
         </Pressable>
 
         <View style={styles.demo}>
-          <Text style={styles.demoText}>Demo pelanggan: 081211112222 / password123</Text>
-          <Text style={styles.demoText}>Demo admin: 081200000000 / admin123</Text>
+          <Text style={styles.demoTitle}>Akun demo</Text>
+          <Text style={styles.demoText}>Pelanggan: 081211112222 / password123</Text>
+          <Text style={styles.demoText}>Admin Cabang: 081200000001 / admin123</Text>
+          <Text style={styles.demoText}>Admin Cuci: 081200000002 / admin123</Text>
+          <Text style={styles.demoText}>Admin Setrika: 081200000003 / admin123</Text>
+          <Text style={styles.demoText}>Admin Kurir: 081200000004 / admin123</Text>
+          <Text style={styles.demoText}>Super Admin: 081200000000 / admin123</Text>
         </View>
       </KeyboardAwareScrollView>
     </View>
@@ -164,5 +170,6 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.md,
     gap: 2,
   },
+  demoTitle: { fontFamily: font.semibold, fontSize: 12, color: colors.onSurfaceSecondary, textAlign: "center", marginBottom: 2 },
   demoText: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textAlign: "center" },
 }));
