@@ -58,6 +58,17 @@ export const api = {
     request(`/orders/${id}/photos`, { method: "POST", body: JSON.stringify({ paths }) }),
   promos: () => request("/promos"),
   pointsHistory: () => request("/points/history"),
+  notifications: () => request("/notifications"),
+  readAllNotifications: () => request("/notifications/read-all", { method: "POST" }),
+  readNotification: (nid: string) => request(`/notifications/${nid}/read`, { method: "POST" }),
+  addresses: () => request("/addresses"),
+  addAddress: (body: { label: string; detail: string; is_default?: boolean }) =>
+    request("/addresses", { method: "POST", body: JSON.stringify(body) }),
+  updateAddress: (aid: string, body: { label?: string; detail?: string; is_default?: boolean }) =>
+    request(`/addresses/${aid}`, { method: "PATCH", body: JSON.stringify(body) }),
+  setDefaultAddress: (aid: string) => request(`/addresses/${aid}/default`, { method: "POST" }),
+  deleteAddress: (aid: string) => request(`/addresses/${aid}`, { method: "DELETE" }),
+  adminReport: () => request("/admin/report"),
 };
 
 // Build an authenticated image URL (token in query so <Image> works on web too).

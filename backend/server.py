@@ -121,6 +121,20 @@ TREATMENTS = [
 TREATMENT_LABEL = {t["key"]: t["label"] for t in TREATMENTS}
 
 STATUS_FLOW = ["diterima", "lunas", "dicuci", "disetrika", "siap", "selesai"]
+STATUS_LABEL = {
+    "diterima": "Diterima",
+    "lunas": "Lunas",
+    "dicuci": "Dicuci",
+    "disetrika": "Disetrika",
+    "siap": "Siap diambil/diantar",
+    "selesai": "Selesai",
+}
+STATUS_BODY = {
+    "dicuci": "Cucian Anda sedang dicuci.",
+    "disetrika": "Cucian Anda sedang disetrika.",
+    "siap": "Pesanan Anda siap diambil/diantar.",
+    "selesai": "Pesanan selesai. Terima kasih!",
+}
 
 # Admin roles and what each may do.
 ADMIN_ROLES = {"admin", "admin_cabang", "admin_cuci", "admin_setrika", "admin_antar"}
@@ -155,6 +169,10 @@ def is_admin(u: dict) -> bool:
 
 def gen_code(order_id: str) -> str:
     return "SUCI-" + order_id.replace("-", "")[:6].upper()
+
+
+def rupiah(n) -> str:
+    return "Rp " + f"{int(round(n or 0)):,}".replace(",", ".")
 
 
 # --------------------------------------------------------------------------- #
@@ -213,6 +231,18 @@ class RewashIn(BaseModel):
     photos: List[str] = []
 
 
+class AddressIn(BaseModel):
+    label: str = Field(min_length=1, max_length=40)
+    detail: str = Field(min_length=1, max_length=240)
+    is_default: bool = False
+
+
+class AddressUpdate(BaseModel):
+    label: Optional[str] = None
+    detail: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -225,6 +255,19 @@ def normalize_phone(value: str) -> str:
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def notify(user_id: str, order_id: Optional[str], title: str, body: str, ntype: str = "order"):
+    await db.notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "order_id": order_id,
+        "title": title,
+        "body": body,
+        "type": ntype,
+        "read": False,
+        "created_at": now_utc(),
+    })
 
 
 def iso(dt) -> Optional[str]:
@@ -246,6 +289,7 @@ def public_user(u: dict) -> dict:
         "phone": u["phone"],
         "name": u.get("name", ""),
         "address": u.get("address", ""),
+        "addresses": u.get("addresses", []),
         "points": u.get("points", 0),
         "role": u.get("role", "customer"),
         "role_label": ROLE_LABEL.get(u.get("role", "customer"), "Pengguna"),
@@ -361,6 +405,8 @@ async def maybe_autocomplete(o: dict) -> dict:
                 {"id": o["id"]},
                 {"$set": {"status": "selesai", "selesai_at": now_utc(), "auto_completed": True}},
             )
+            await notify(o["customer_id"], o["id"], "Pesanan selesai otomatis",
+                         "Pesanan otomatis selesai setelah 24 jam siap diambil.", "status")
             o["status"] = "selesai"
             o["selesai_at"] = now_utc()
             o["auto_completed"] = True
@@ -415,6 +461,96 @@ async def update_me(body: ProfileUpdate, user: dict = Depends(get_current_user))
         await db.users.update_one({"id": user["id"]}, {"$set": upd})
     fresh = await db.users.find_one({"id": user["id"]})
     return public_user(fresh)
+
+
+# --------------------------------------------------------------------------- #
+# Routes: addresses (multiple, customer)
+# --------------------------------------------------------------------------- #
+async def persist_addresses(user_id: str, addresses: list) -> list:
+    if addresses:
+        # Ensure exactly one default.
+        if not any(a.get("is_default") for a in addresses):
+            addresses[0]["is_default"] = True
+        seen = False
+        for a in addresses:
+            if a.get("is_default"):
+                if seen:
+                    a["is_default"] = False
+                else:
+                    seen = True
+        default_detail = next((a["detail"] for a in addresses if a.get("is_default")), "")
+    else:
+        default_detail = ""
+    await db.users.update_one(
+        {"id": user_id}, {"$set": {"addresses": addresses, "address": default_detail}}
+    )
+    return addresses
+
+
+@api.get("/addresses")
+async def list_addresses(user: dict = Depends(get_current_user)):
+    addresses = user.get("addresses", [])
+    if not addresses and (user.get("address") or "").strip():
+        addresses = [{
+            "id": str(uuid.uuid4()),
+            "label": "Utama",
+            "detail": user["address"].strip(),
+            "is_default": True,
+        }]
+        addresses = await persist_addresses(user["id"], addresses)
+    return {"addresses": addresses}
+
+
+@api.post("/addresses")
+async def add_address(body: AddressIn, user: dict = Depends(get_current_user)):
+    addresses = list(user.get("addresses", []))
+    new_addr = {
+        "id": str(uuid.uuid4()),
+        "label": body.label.strip(),
+        "detail": body.detail.strip(),
+        "is_default": body.is_default or len(addresses) == 0,
+    }
+    if new_addr["is_default"]:
+        for a in addresses:
+            a["is_default"] = False
+    addresses.append(new_addr)
+    addresses = await persist_addresses(user["id"], addresses)
+    return {"addresses": addresses}
+
+
+@api.patch("/addresses/{aid}")
+async def update_address(aid: str, body: AddressUpdate, user: dict = Depends(get_current_user)):
+    addresses = list(user.get("addresses", []))
+    target = next((a for a in addresses if a["id"] == aid), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Alamat tidak ditemukan")
+    if body.label is not None:
+        target["label"] = body.label.strip()
+    if body.detail is not None:
+        target["detail"] = body.detail.strip()
+    if body.is_default:
+        for a in addresses:
+            a["is_default"] = a["id"] == aid
+    addresses = await persist_addresses(user["id"], addresses)
+    return {"addresses": addresses}
+
+
+@api.post("/addresses/{aid}/default")
+async def set_default_address(aid: str, user: dict = Depends(get_current_user)):
+    addresses = list(user.get("addresses", []))
+    if not any(a["id"] == aid for a in addresses):
+        raise HTTPException(status_code=404, detail="Alamat tidak ditemukan")
+    for a in addresses:
+        a["is_default"] = a["id"] == aid
+    addresses = await persist_addresses(user["id"], addresses)
+    return {"addresses": addresses}
+
+
+@api.delete("/addresses/{aid}")
+async def delete_address(aid: str, user: dict = Depends(get_current_user)):
+    addresses = [a for a in user.get("addresses", []) if a["id"] != aid]
+    addresses = await persist_addresses(user["id"], addresses)
+    return {"addresses": addresses}
 
 
 # --------------------------------------------------------------------------- #
@@ -478,6 +614,8 @@ async def create_order(body: OrderCreate, user: dict = Depends(get_current_user)
         "destination": destination_for(oid),
     }
     await db.orders.insert_one(order)
+    await notify(user["id"], oid, "Pesanan dibuat",
+                 f"{order['code']} diterima. Menunggu admin menimbang cucian Anda.", "order")
     return order_public(order)
 
 
@@ -510,6 +648,8 @@ async def set_items(order_id: str, body: OrderItemsUpdate, admin: dict = Depends
         }},
     )
     fresh = await db.orders.find_one({"id": order_id})
+    await notify(o["customer_id"], order_id, "Cucian sudah ditimbang",
+                 f"Total {rupiah(pricing['subtotal'])}. Silakan lakukan pembayaran.", "payment")
     return order_public(fresh)
 
 
@@ -591,6 +731,9 @@ async def pay_order(order_id: str, body: PayIn = PayIn(), user: dict = Depends(g
         {"$set": {"status": "lunas", "paid": True, "paid_at": now_utc(),
                   "use_points": use_points, "discount": discount, "total": total}},
     )
+    earned = o.get("points_earned", 0)
+    await notify(o["customer_id"], order_id, "Pembayaran berhasil",
+                 f"Pembayaran {rupiah(total)} diterima." + (f" +{earned} poin." if earned else ""), "payment")
     fresh = await db.orders.find_one({"id": order_id})
     return order_public(fresh)
 
@@ -615,6 +758,9 @@ async def update_status(order_id: str, body: StatusUpdate, admin: dict = Depends
         upd["selesai_at"] = now_utc()
         upd["rewash_active"] = False
     await db.orders.update_one({"id": order_id}, {"$set": upd})
+    await notify(o["customer_id"], order_id,
+                 f"Status: {STATUS_LABEL.get(body.status, body.status)}",
+                 STATUS_BODY.get(body.status, "Status pesanan diperbarui."), "status")
     fresh = await db.orders.find_one({"id": order_id})
     return order_public(fresh)
 
@@ -632,6 +778,8 @@ async def confirm_received(order_id: str, user: dict = Depends(get_current_user)
         {"id": order_id},
         {"$set": {"status": "selesai", "selesai_at": now_utc(), "rewash_active": False}},
     )
+    await notify(o["customer_id"], order_id, "Pesanan selesai",
+                 "Terima kasih telah mengonfirmasi. Pesanan selesai.", "status")
     fresh = await db.orders.find_one({"id": order_id})
     return order_public(fresh)
 
@@ -669,6 +817,8 @@ async def request_rewash(order_id: str, body: RewashIn, user: dict = Depends(get
             "estimated_ready_at": now_utc() + timedelta(hours=24),
         }},
     )
+    await notify(o["customer_id"], order_id, "Cuci ulang diproses",
+                 "Permintaan cuci ulang Anda diterima. Pesanan diproses kembali.", "status")
     fresh = await db.orders.find_one({"id": order_id})
     return order_public(fresh)
 
@@ -806,6 +956,85 @@ async def points_history(user: dict = Depends(get_current_user)):
             }
             for t in txns
         ],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Routes: notifications
+# --------------------------------------------------------------------------- #
+@api.get("/notifications")
+async def list_notifications(user: dict = Depends(get_current_user)):
+    docs = await db.notifications.find({"user_id": user["id"]}).sort("created_at", -1).to_list(100)
+    unread = await db.notifications.count_documents({"user_id": user["id"], "read": False})
+    return {
+        "unread": unread,
+        "items": [
+            {
+                "id": n["id"],
+                "order_id": n.get("order_id"),
+                "title": n.get("title", ""),
+                "body": n.get("body", ""),
+                "type": n.get("type", "order"),
+                "read": n.get("read", False),
+                "created_at": iso(n.get("created_at")),
+            }
+            for n in docs
+        ],
+    }
+
+
+@api.post("/notifications/read-all")
+async def read_all_notifications(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": user["id"], "read": False}, {"$set": {"read": True}}
+    )
+    return {"ok": True}
+
+
+@api.post("/notifications/{nid}/read")
+async def read_notification(nid: str, user: dict = Depends(get_current_user)):
+    await db.notifications.update_one(
+        {"id": nid, "user_id": user["id"]}, {"$set": {"read": True}}
+    )
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Routes: admin report
+# --------------------------------------------------------------------------- #
+@api.get("/admin/report")
+async def admin_report(admin: dict = Depends(require_admin)):
+    orders = await db.orders.find({}).to_list(2000)
+
+    def created(o):
+        c = o.get("created_at")
+        if isinstance(c, str):
+            c = datetime.fromisoformat(c)
+        if c and c.tzinfo is None:
+            c = c.replace(tzinfo=timezone.utc)
+        return c
+
+    total = len(orders)
+    completed = sum(1 for o in orders if o.get("status") == "selesai")
+    active = total - completed
+    revenue = sum(o.get("total", 0) for o in orders if o.get("paid"))
+    start = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = [o for o in orders if created(o) and created(o) >= start]
+    today_orders = len(today)
+    today_revenue = sum(o.get("total", 0) for o in today if o.get("paid"))
+    ratings = [o["rating"] for o in orders if o.get("rating")]
+    avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0
+    by_status = {s: sum(1 for o in orders if o.get("status") == s) for s in STATUS_FLOW}
+    return {
+        "total": total,
+        "active": active,
+        "completed": completed,
+        "revenue": revenue,
+        "today_orders": today_orders,
+        "today_revenue": today_revenue,
+        "avg_rating": avg_rating,
+        "rating_count": len(ratings),
+        "by_status": by_status,
     }
 
 

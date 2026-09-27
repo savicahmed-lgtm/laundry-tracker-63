@@ -2,11 +2,19 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 
 import { api, setToken } from "@/src/api";
 
+export type Address = {
+  id: string;
+  label: string;
+  detail: string;
+  is_default: boolean;
+};
+
 export type User = {
   id: string;
   phone: string;
   name: string;
   address: string;
+  addresses?: Address[];
   points: number;
   role: "customer" | "admin" | "admin_cabang" | "admin_cuci" | "admin_setrika" | "admin_antar";
   role_label: string;

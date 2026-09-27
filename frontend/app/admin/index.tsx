@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 
@@ -25,8 +25,10 @@ export default function AdminScreen() {
   const { user, logout } = useAuth();
   const toast = useToast();
   const [filter, setFilter] = useState("aktif");
+  const [search, setSearch] = useState("");
   const role = user?.role ?? "";
   const isScanRole = SCAN_ROLES.includes(role);
+  const isSuper = role === "admin" || role === "admin_cabang";
 
   const ordersQ = useQuery({ queryKey: ["orders"], queryFn: api.orders, refetchInterval: 5000 });
 
@@ -40,9 +42,17 @@ export default function AdminScreen() {
   });
 
   const all = ordersQ.data ?? [];
-  const data = all.filter((o: any) =>
-    filter === "semua" ? true : filter === "selesai" ? o.status === "selesai" : o.status !== "selesai",
-  );
+  const q = search.trim().toLowerCase();
+  const data = all.filter((o: any) => {
+    const statusOk =
+      filter === "semua" ? true : filter === "selesai" ? o.status === "selesai" : o.status !== "selesai";
+    const searchOk =
+      !q ||
+      (o.customer_name || "").toLowerCase().includes(q) ||
+      (o.customer_phone || "").toLowerCase().includes(q) ||
+      (o.code || "").toLowerCase().includes(q);
+    return statusOk && searchOk;
+  });
 
   const activeCount = all.filter((o: any) => o.status !== "selesai").length;
 
@@ -53,9 +63,16 @@ export default function AdminScreen() {
           <Text style={styles.hi}>{user?.role_label ?? "Dashboard Admin"}</Text>
           <Text style={styles.name}>{user?.name}</Text>
         </View>
-        <Pressable onPress={async () => { await logout(); router.replace("/login"); }} hitSlop={10} testID="admin-logout">
-          <Ionicons name="log-out-outline" size={24} color={colors.error} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {isSuper ? (
+            <Pressable onPress={() => router.push("/admin/report")} hitSlop={10} testID="admin-report-btn" style={styles.headerBtn}>
+              <Ionicons name="bar-chart-outline" size={22} color={colors.brandPrimary} />
+            </Pressable>
+          ) : null}
+          <Pressable onPress={async () => { await logout(); router.replace("/login"); }} hitSlop={10} testID="admin-logout" style={styles.headerBtn}>
+            <Ionicons name="log-out-outline" size={24} color={colors.error} />
+          </Pressable>
+        </View>
       </View>
 
       {isScanRole ? (
@@ -74,6 +91,24 @@ export default function AdminScreen() {
           <Text style={styles.statValue}>{all.length}</Text>
           <Text style={styles.statLabel}>Total Pesanan</Text>
         </View>
+      </View>
+
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={18} color={colors.muted} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Cari nama / No HP / kode"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          testID="admin-search"
+        />
+        {search ? (
+          <Pressable onPress={() => setSearch("")} hitSlop={8} testID="admin-search-clear">
+            <Ionicons name="close-circle" size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.chipRowWrap}>
@@ -195,6 +230,10 @@ export default function AdminScreen() {
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  headerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginBottom: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, minHeight: 46 },
+  searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.onSurface },
   scanCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, marginHorizontal: spacing.lg, marginBottom: spacing.md, borderRadius: radius.md, paddingVertical: spacing.md },
   scanCtaText: { fontFamily: font.bold, fontSize: 15, color: colors.onBrandPrimary },
   rewashBadge: { flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: "#FEE2E2", borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6 },

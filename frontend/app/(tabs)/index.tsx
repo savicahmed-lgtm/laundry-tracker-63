@@ -25,13 +25,17 @@ export default function HomeScreen() {
   const catalogQ = useQuery({ queryKey: ["catalog"], queryFn: api.catalog });
   const ordersQ = useQuery({ queryKey: ["orders"], queryFn: api.orders });
   const promosQ = useQuery({ queryKey: ["promos"], queryFn: api.promos });
+  const notifQ = useQuery({ queryKey: ["notifications"], queryFn: api.notifications, refetchInterval: 8000 });
 
   useFocusEffect(
     useCallback(() => {
       refresh();
       ordersQ.refetch();
+      notifQ.refetch();
     }, []),
   );
+
+  const unread = notifQ.data?.unread ?? 0;
 
   const points = user?.points ?? 0;
   const toFree = points >= 25 ? 0 : 25 - (points % 25);
@@ -57,8 +61,18 @@ export default function HomeScreen() {
             <Text style={styles.hi}>Halo,</Text>
             <Text style={styles.name}>{user?.name || "Pelanggan"} 👋</Text>
           </View>
-          <View style={styles.avatar}>
-            <Ionicons name="water" size={22} color={colors.onBrandPrimary} />
+          <View style={styles.headerRight}>
+            <Pressable style={styles.bell} onPress={() => router.push("/notifications")} testID="home-bell" hitSlop={8}>
+              <Ionicons name="notifications-outline" size={24} color={colors.onSurface} />
+              {unread > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unread > 9 ? "9+" : unread}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <View style={styles.avatar}>
+              <Ionicons name="water" size={22} color={colors.onBrandPrimary} />
+            </View>
           </View>
         </View>
 
@@ -171,6 +185,10 @@ const useStyles = makeStyles((colors) => ({
   },
   hi: { fontFamily: font.regular, fontSize: 14, color: colors.muted },
   name: { fontFamily: font.bold, fontSize: 22, color: colors.onSurface },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  bell: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  bellBadge: { position: "absolute", top: 6, right: 6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, borderWidth: 2, borderColor: colors.surface },
+  bellBadgeText: { fontFamily: font.bold, fontSize: 10, color: colors.onError },
   avatar: {
     width: 46,
     height: 46,

@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
@@ -23,8 +23,10 @@ export default function NewOrderScreen() {
   const params = useLocalSearchParams<{ item?: string }>();
 
   const catalogQ = useQuery({ queryKey: ["catalog"], queryFn: api.catalog });
+  const addrQ = useQuery({ queryKey: ["addresses"], queryFn: api.addresses });
   const items = catalogQ.data?.items ?? [];
   const freeKgValue = catalogQ.data?.free_kg_value ?? 7000;
+  const savedAddresses = addrQ.data?.addresses ?? [];
 
   const [qty, setQty] = useState<Record<string, number>>(() => (params.item ? { [params.item]: 1 } : {}));
   const [service, setService] = useState<"pickup" | "branch">("pickup");
@@ -105,7 +107,30 @@ export default function NewOrderScreen() {
 
         {service === "pickup" ? (
           <View>
-            <Text style={styles.label}>Alamat Penjemputan</Text>
+            <View style={styles.addrHeader}>
+              <Text style={styles.label}>Alamat Penjemputan</Text>
+              <Pressable onPress={() => router.push("/addresses")} testID="manage-addresses">
+                <Text style={styles.manageLink}>Kelola</Text>
+              </Pressable>
+            </View>
+            {savedAddresses.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.addrChips}>
+                {savedAddresses.map((a: any) => {
+                  const selected = address.trim() === a.detail.trim();
+                  return (
+                    <Pressable
+                      key={a.id}
+                      style={[styles.addrChip, selected && styles.addrChipActive]}
+                      onPress={() => setAddress(a.detail)}
+                      testID={`addr-chip-${a.id}`}
+                    >
+                      <Ionicons name="location" size={14} color={selected ? colors.brandPrimary : colors.muted} />
+                      <Text style={[styles.addrChipText, selected && { color: colors.brandPrimary }]}>{a.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
             <TextInput style={[styles.input, styles.multiline]} value={address} onChangeText={setAddress} placeholder="Alamat lengkap" placeholderTextColor={colors.muted} multiline testID="new-order-address" />
           </View>
         ) : null}
@@ -186,6 +211,12 @@ const useStyles = makeStyles((colors) => ({
   serviceTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.onSurface, marginTop: spacing.xs },
   serviceSub: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
   label: { fontFamily: font.medium, fontSize: 13, color: colors.muted, marginTop: spacing.sm, marginBottom: spacing.xs },
+  addrHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  manageLink: { fontFamily: font.semibold, fontSize: 13, color: colors.brandPrimary, marginTop: spacing.sm },
+  addrChips: { gap: spacing.sm, paddingVertical: spacing.xs, paddingRight: spacing.lg },
+  addrChip: { flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: spacing.md, height: 36, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  addrChipActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
+  addrChipText: { fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceTertiary },
   input: { backgroundColor: colors.surface, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 50, fontFamily: font.regular, fontSize: 15, color: colors.onSurface, borderWidth: 1, borderColor: colors.border },
   multiline: { minHeight: 72, paddingTop: spacing.md, textAlignVertical: "top" },
   redeem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, marginTop: spacing.sm },
