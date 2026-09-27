@@ -1,0 +1,164 @@
+{
+  "app_name": "Loundry Suci",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A fresh, trustworthy, and highly intuitive green-themed interface that makes laundry logistics feel as clean as the service itself.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#111827",
+    "surfaceSecondary": "#F4F7F5",
+    "onSurfaceSecondary": "#1F2937",
+    "surfaceTertiary": "#EAEFEA",
+    "onSurfaceTertiary": "#374151",
+    "surfaceInverse": "#111827",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#059669",
+    "brandPrimary": "#059669",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#10B981",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#D1FAE5",
+    "onBrandTertiary": "#065F46",
+    "success": "#16A34A",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#FFFFFF",
+    "error": "#EF4444",
+    "onError": "#FFFFFF",
+    "info": "#3B82F6",
+    "onInfo": "#FFFFFF",
+    "border": "#E5E7EB",
+    "borderStrong": "#D1D5DB",
+    "divider": "#F3F4F6",
+    "muted": "#6B7280",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical padding, avoid dense dashboards. Ensure safe areas are respected and touch targets are minimum 44pt.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Apply to bottom tab bar and sticky headers over scrolling lists",
+      "Apply to Bottom-sheet handles / headers on the map tracking screen",
+      "Ensure text on glass uses onSurface and background is properly tinted"
+    ],
+    "dont's": [
+      "Do not apply glass to list rows or dense form inputs",
+      "Do not over-stack blur effects (max 2 per screen)"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Minimal authentication via phone number and password.",
+      "states": {
+        "loading": "Centered spinner during auth.",
+        "empty": "N/A",
+        "error": "Toast or inline message for invalid credentials."
+      },
+      "layout": "Centered logo at the top with a subtle green tint background or photo backdrop (using gradient scrim). Clean, single-column input form (Phone Number, Password) with a prominent sticky primary button at the bottom inside KeyboardAvoidingView."
+    },
+    {
+      "name": "Home (Customer)",
+      "purpose": "Dashboard to view points, current active order status, and start a new laundry order.",
+      "states": {
+        "loading": "Skeleton loader for the active order card and points.",
+        "empty": "Illustration of clean clothes if no active orders.",
+        "error": "Error loading dashboard data with a 'Retry' button."
+      },
+      "layout": "Top section features a Loyalty/Points card (showing current points and 'X points to free kg'). Below that, an 'Active Order' glassmorphism tracking mini-card if an order is active. The main area is a grid (flexWrap with space-between) of laundry item categories (Karpet, Kaos, Kemeja...) using tinted icon containers (brandTertiary bg) allowing users to tap to start an order."
+    },
+    {
+      "name": "Order Creation & Options",
+      "purpose": "Select item quantities and delivery options, simulating checkout/payment.",
+      "states": {
+        "loading": "Spinner over submit button.",
+        "empty": "N/A",
+        "error": "Validation error if no items selected."
+      },
+      "layout": "Scrollable list of items with +/- steppers to specify quantities. Below the items, a segmented control or toggle card for 'Pickup & Delivery' vs 'Drop-off at Branch'. A sticky primary CTA fixed at the bottom displaying total price to proceed to Payment Simulation."
+    },
+    {
+      "name": "Order Tracking & Map",
+      "purpose": "Live map of courier with a vertical timeline of order statuses.",
+      "states": {
+        "loading": "Map loading state and skeleton timeline.",
+        "empty": "No active tracking session found.",
+        "error": "Unable to fetch live location."
+      },
+      "layout": "Top half of the screen is a full-bleed map simulating a moving courier route. The bottom half is a @gorhom/bottom-sheet containing a vertical timeline (Diterima -> Lunas -> Dicuci -> Disetrika -> Siap diambil/diantar -> Selesai). Includes a button to leave rating/comments once 'Selesai' is reached."
+    },
+    {
+      "name": "Admin Dashboard",
+      "purpose": "Manage all customer orders and update their statuses.",
+      "states": {
+        "loading": "List skeletons.",
+        "empty": "No active orders to process.",
+        "error": "Failed to fetch orders."
+      },
+      "layout": "List of active orders grouped by status. Each row shows customer name, item count, and a dropdown or quick-action button to progress the status (e.g., mark as 'Dicuci')."
+    }
+  ],
+  "images": {
+    "hero_login": {
+      "url": "https://images.unsplash.com/photo-1699797467199-6bdf301649e8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzV8MHwxfHNlYXJjaHwxfHxjbGVhbiUyMGZvbGRlZCUyMHdoaXRlJTIwY2xvdGhlcyUyMHN0YWNrJTIwZnJlc2h8ZW58MHx8fHwxNzkwNDY5NzI5fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Clean folded white clothes stack representing fresh laundry"
+    },
+    "tracking_courier": {
+      "url": "https://images.unsplash.com/photo-1617347454431-f49d7ff5c3b1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwxfHxkZWxpdmVyeSUyMGNvdXJpZXIlMjBzY29vdGVyfGVufDB8fHx8MTc5MDQ2OTcyOXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Delivery courier on scooter"
+    },
+    "home_banner": {
+      "url": "https://images.unsplash.com/photo-1626806819282-2c1dc01a5e0c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxsYXVuZHJ5JTIwd2FzaGluZyUyMG1hY2hpbmUlMjBtaW5pbWFsfGVufDB8fHx8MTc5MDQ2OTczMHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Minimalist washing machine setting"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the '1 iOS-Native Clean' personality. Use the provided green-forward palette (`brand: #059669`) consistently for all primary actions and indicators.",
+    "Implement a robust vertical timeline for the order tracking screen. Use distinct statuses: Diterima, Lunas, Dicuci, Disetrika, Siap diambil/diantar, Selesai.",
+    "Ensure map integration correctly simulates tracking a courier route during the delivery phases.",
+    "On the Home Screen, prominently feature the Loyalty Points balance (1 kg = 1 pt, 25 pts = 1 free kg) in a lifted `surfaceSecondary` or `brandTertiary` card.",
+    "Ensure the quantity selector (steppers) for items like Karpet, Kaos, Kemeja are user-friendly with min 44x44pt touch targets.",
+    "Use a gradient scrim (top to bottom, transparent to `surfaceInverse`) over any background photos like the login/hero screen so text remains fully legible.",
+    "For the admin side, keep the layout functional and list-focused so status transitions are 1-tap away."
+  ]
+}

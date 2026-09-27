@@ -1,0 +1,41 @@
+{
+  "summary": "Full backend + frontend testing for Loundry Suci (fresh build). Backend: 27/27 pytest cases pass covering auth, catalog, order lifecycle (create with points redemption, pay, sequential admin status progression, courier tracking, feedback) plus authorization/edge cases (cross-customer 403, non-admin status 403, non-sequential status 400, feedback before selesai 400, insufficient points auto-ignored). Frontend (Expo web preview, mobile viewport 390x844): customer login -> home (points card, catalog grid) -> create order -> pay -> tracking timeline + stylized web map fallback ('map-tracker') all functioning. Admin login -> dashboard with counts (16 Aktif / 19 Total), filter chips (Aktif/Semua/Selesai), advance-status button progresses order status and refreshes list, completed orders show star rating. Found & fixed ONE real backend bug: courier endpoint threw TypeError when comparing naive Mongo datetime to tz-aware now_utc() (500 error whenever order is in 'siap'). Also added a conftest that resets demo customer points to 30 before test session to keep redemption tests deterministic.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Non-blocking but should migrate to boxShadow for RN 0.79+."},
+      {"component": "props.pointerEvents", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Coming from a dependency (likely react-native-maps web shim); non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_loundry.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: migrate any shadow* style props to boxShadow to silence deprecation warnings.",
+    "Optional: add tzinfo=UTC when reading any other datetime fields from Mongo if new endpoints are added (pattern applied to siap_at)."
+  ],
+  "critical_code_review_comments": [
+    "server.py: Mongo returned naive datetime (siap_at) collided with tz-aware now_utc() in courier endpoint — FIXED by attaching timezone.utc when tzinfo is None.",
+    "Order redemption: use_points is silently downgraded to False when user has <25 points (no error). Confirmed behavior is intentional per spec; consider surfacing a 400 for clarity.",
+    "All backend endpoints correctly use uuid string ids, exclude Mongo _id from responses, and use env vars for MONGO_URL/DB_NAME."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (courier tz-aware fix)",
+    "/app/backend/tests/test_loundry.py (new)",
+    "/app/backend/tests/conftest.py (new: resets demo points to 30 at session start)"
+  ],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "conftest.py resets demo customer (081211112222) points to 30 before test session. Tests create ephemeral orders and a TEST_ prefixed secondary customer for authz tests; not cleaned up (safe — isolated by prefix and separate customer_id).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests are stable and idempotent thanks to conftest resetting demo points to 30. Run: pytest /app/backend/tests/test_loundry.py -n 0 (serial mode). Demo credentials in /app/memory/test_credentials.md. Frontend uses testIDs for all interactive elements — the map is a stylized web fallback (testID map-tracker) on web preview, native maps only on device.",
+  "rca_of_issue": "Bug RCA: GET /api/orders/{id}/courier returned 500 whenever an order reached status 'siap'. Cause: MongoDB stores datetimes as UTC-naive; when the doc was read back, siap_at had tzinfo=None while now_utc() returns a tz-aware datetime — subtraction raised 'TypeError: can't subtract offset-naive and offset-aware datetimes'. Reproduction: create order -> pay -> admin PATCH status to dicuci->disetrika->siap -> GET /orders/{id}/courier -> 500. Fix (server.py:395): after loading siap_at, if siap.tzinfo is None assign timezone.utc. Verified: all 27 pytest cases now pass and end-to-end UI flow reaches tracking screen without red screen."
+}

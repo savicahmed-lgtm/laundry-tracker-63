@@ -1,0 +1,192 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
+import { useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@react-native-vector-icons/ionicons";
+
+import { api } from "@/src/api";
+import { useAuth } from "@/src/auth";
+import { useToast } from "@/src/toast";
+import { STATUS_META, formatRp, statusIndex, nextStatus } from "@/src/format";
+import { queryClient } from "@/src/query-client";
+import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
+
+const FILTERS = [
+  { key: "aktif", label: "Aktif" },
+  { key: "semua", label: "Semua" },
+  { key: "selesai", label: "Selesai" },
+];
+
+export default function AdminScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { user, logout } = useAuth();
+  const toast = useToast();
+  const [filter, setFilter] = useState("aktif");
+
+  const ordersQ = useQuery({ queryKey: ["orders"], queryFn: api.orders, refetchInterval: 5000 });
+
+  const advance = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => api.setStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast("Status diperbarui", "success");
+    },
+    onError: (e: any) => toast(e.message || "Gagal memperbarui", "error"),
+  });
+
+  const all = ordersQ.data ?? [];
+  const data = all.filter((o: any) =>
+    filter === "semua" ? true : filter === "selesai" ? o.status === "selesai" : o.status !== "selesai",
+  );
+
+  const activeCount = all.filter((o: any) => o.status !== "selesai").length;
+
+  return (
+    <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.hi}>Dashboard Admin</Text>
+          <Text style={styles.name}>{user?.name}</Text>
+        </View>
+        <Pressable onPress={async () => { await logout(); router.replace("/login"); }} hitSlop={10} testID="admin-logout">
+          <Ionicons name="log-out-outline" size={24} color={colors.error} />
+        </Pressable>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{activeCount}</Text>
+          <Text style={styles.statLabel}>Pesanan Aktif</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{all.length}</Text>
+          <Text style={styles.statLabel}>Total Pesanan</Text>
+        </View>
+      </View>
+
+      <View style={styles.chipRowWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {FILTERS.map((f) => (
+            <Pressable key={f.key} onPress={() => setFilter(f.key)} style={[styles.chip, filter === f.key && styles.chipActive]} testID={`admin-filter-${f.key}`}>
+              <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>{f.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {ordersQ.isLoading ? (
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>
+      ) : data.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="checkmark-done-circle-outline" size={56} color={colors.borderStrong} />
+          <Text style={styles.emptyText}>Tidak ada pesanan</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={(o) => o.id}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing["2xl"], gap: spacing.md }}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => {
+            const meta = STATUS_META[item.status as keyof typeof STATUS_META];
+            const nxt = nextStatus(item.status);
+            const waitingPay = item.status === "diterima";
+            return (
+              <View style={styles.card} testID={`admin-order-${item.id}`}>
+                <Pressable style={styles.cardTop} onPress={() => router.push(`/order/${item.id}`)}>
+                  <View style={styles.cardIcon}>
+                    <Ionicons name="person" size={18} color={colors.brandPrimary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.custName}>{item.customer_name}</Text>
+                    <Text style={styles.custPhone}>{item.customer_phone} · #{item.id.slice(0, 6).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.badge}><Text style={styles.badgeText}>{meta.label}</Text></View>
+                </Pressable>
+
+                <View style={styles.progressBar}>
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <View key={i} style={[styles.seg, { backgroundColor: i <= statusIndex(item.status) ? colors.brandPrimary : colors.border }]} />
+                  ))}
+                </View>
+
+                <View style={styles.cardMeta}>
+                  <Text style={styles.metaText}>
+                    {item.items.reduce((s: number, i: any) => s + i.qty, 0)} item · {item.service === "pickup" ? "Jemput & Antar" : "Ke Cabang"}
+                  </Text>
+                  <Text style={styles.metaTotal}>{formatRp(item.total)}</Text>
+                </View>
+
+                {item.status === "selesai" ? (
+                  item.rating ? (
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={14} color={colors.warning} />
+                      <Text style={styles.ratingText}>{item.rating}/5 {item.comment ? `· "${item.comment}"` : ""}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.noRating}>Selesai · belum ada ulasan</Text>
+                  )
+                ) : waitingPay ? (
+                  <View style={styles.waitPay}>
+                    <Ionicons name="time-outline" size={16} color={colors.warning} />
+                    <Text style={styles.waitPayText}>Menunggu pembayaran pelanggan</Text>
+                  </View>
+                ) : nxt ? (
+                  <Pressable
+                    style={styles.advanceBtn}
+                    onPress={() => advance.mutate({ id: item.id, status: nxt })}
+                    testID={`advance-${item.id}`}
+                  >
+                    <Ionicons name="arrow-forward-circle" size={18} color={colors.onBrandPrimary} />
+                    <Text style={styles.advanceText}>Tandai: {STATUS_META[nxt].label}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+const useStyles = makeStyles((colors) => ({
+  root: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  hi: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+  name: { fontFamily: font.bold, fontSize: 20, color: colors.onSurface },
+  statsRow: { flexDirection: "row", gap: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  statCard: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  statValue: { fontFamily: font.bold, fontSize: 26, color: colors.brandPrimary },
+  statLabel: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: 2 },
+  chipRowWrap: { height: 56, justifyContent: "center" },
+  chipRow: { gap: spacing.sm, paddingHorizontal: spacing.lg, alignItems: "center" },
+  chip: { height: 36, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  chipText: { fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceTertiary },
+  chipTextActive: { color: colors.onBrandPrimary },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  emptyText: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
+  card: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.md },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  cardIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  custName: { fontFamily: font.semibold, fontSize: 15, color: colors.onSurface },
+  custPhone: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 2 },
+  badge: { backgroundColor: colors.surfaceTertiary, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill },
+  badgeText: { fontFamily: font.semibold, fontSize: 11, color: colors.onSurfaceTertiary },
+  progressBar: { flexDirection: "row", gap: 4 },
+  seg: { flex: 1, height: 4, borderRadius: 2 },
+  cardMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  metaText: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+  metaTotal: { fontFamily: font.bold, fontSize: 15, color: colors.onSurface },
+  advanceBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.md, paddingVertical: spacing.md },
+  advanceText: { fontFamily: font.semibold, fontSize: 14, color: colors.onBrandPrimary },
+  waitPay: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
+  waitPayText: { fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceSecondary },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  ratingText: { fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceSecondary, flex: 1 },
+  noRating: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+}));
