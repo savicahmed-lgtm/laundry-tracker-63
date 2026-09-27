@@ -205,6 +205,15 @@ export default function AdminScreen() {
                     <Ionicons name="qr-code-outline" size={18} color={colors.onBrandPrimary} />
                     <Text style={styles.advanceText}>Scan untuk {action.label}</Text>
                   </Pressable>
+                ) : action?.kind === "status" && action.target === "siap" ? (
+                  <Pressable
+                    style={styles.advanceBtn}
+                    onPress={() => router.push(`/admin/count-check/${item.id}`)}
+                    testID={`advance-${item.id}`}
+                  >
+                    <Ionicons name="clipboard-outline" size={18} color={colors.onBrandPrimary} />
+                    <Text style={styles.advanceText}>Verifikasi & Tandai Siap</Text>
+                  </Pressable>
                 ) : action?.kind === "status" ? (
                   <Pressable
                     style={styles.advanceBtn}

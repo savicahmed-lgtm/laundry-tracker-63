@@ -13,7 +13,7 @@ import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
 import { STATUS_FLOW, STATUS_META, formatRp, formatDate, statusIndex, isAdminRole } from "@/src/format";
 import { Button, StarRating } from "@/src/components/ui";
-import { OrderItemsCard } from "@/src/components/order-items-card";
+import { OrderItemsCard, ItemCheckCard } from "@/src/components/order-items-card";
 import MapTracker from "@/src/components/map-tracker";
 import { queryClient } from "@/src/query-client";
 import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
@@ -246,6 +246,9 @@ export default function OrderDetailScreen() {
           {/* Items */}
           <View style={{ marginTop: spacing.lg }}>
             <OrderItemsCard order={order} testID="order-items" />
+          </View>
+          <View style={{ marginTop: spacing.md }}>
+            <ItemCheckCard order={order} testID="order-item-check" />
           </View>
 
           {/* Photos */}

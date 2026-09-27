@@ -213,6 +213,16 @@ class OrderItemsUpdate(BaseModel):
     weight_kg: float = Field(ge=0, le=200)
 
 
+class CountCheckItem(BaseModel):
+    key: str
+    qty: int = Field(ge=0, le=99)
+
+
+class CountCheckIn(BaseModel):
+    items: List[CountCheckItem] = []
+    stage: Literal["masuk", "keluar"] = "keluar"
+
+
 class PayIn(BaseModel):
     use_points: bool = False
 
@@ -325,6 +335,24 @@ def destination_for(order_id: str) -> dict:
     return {"lat": round(BRANCH["lat"] + dlat, 6), "lng": round(BRANCH["lng"] + dlng, 6)}
 
 
+def check_public(c: dict) -> dict:
+    role = c.get("checked_role", "")
+    return {
+        "id": c.get("id"),
+        "stage": c.get("stage", "keluar"),
+        "items": [
+            {"key": it["key"], "name": CATALOG_BY_KEY.get(it["key"], {}).get("name", it["key"]), "qty": it["qty"]}
+            for it in c.get("items", [])
+        ],
+        "match": c.get("match", False),
+        "diffs": c.get("diffs", []),
+        "checked_by": c.get("checked_by", ""),
+        "checked_role": role,
+        "role_label": ROLE_LABEL.get(role, role),
+        "created_at": iso(c.get("created_at")),
+    }
+
+
 def order_public(o: dict) -> dict:
     items = []
     for it in o.get("items", []):
@@ -348,6 +376,10 @@ def order_public(o: dict) -> dict:
         "customer_name": o.get("customer_name", ""),
         "customer_phone": o.get("customer_phone", ""),
         "items": items,
+        "items_set_at": iso(o.get("items_set_at")),
+        "items_set_by": o.get("items_set_by", ""),
+        "item_checks": [check_public(c) for c in o.get("item_checks", [])],
+        "last_count_check": check_public(o["item_checks"][-1]) if o.get("item_checks") else None,
         "service": o["service"],
         "treatment": treatment,
         "treatment_label": TREATMENT_LABEL.get(treatment, treatment),
@@ -635,6 +667,17 @@ async def set_items(order_id: str, body: OrderItemsUpdate, admin: dict = Depends
         norm_items.append({"key": it.key, "qty": it.qty})
     pricing = compute_pricing(norm_items, body.weight_kg, o.get("treatment", "cuci_setrika"))
     ready_hours = 24 + (12 if body.weight_kg > 3 else 0) + (8 if o["service"] == "pickup" else 0)
+    # Snapshot jumlah item SAAT MASUK — jadi acuan pencocokan saat keluar.
+    intake_check = {
+        "id": uuid.uuid4().hex[:12],
+        "stage": "masuk",
+        "items": norm_items,
+        "match": True,
+        "diffs": [],
+        "checked_by": admin.get("name", ""),
+        "checked_role": admin.get("role", ""),
+        "created_at": now_utc(),
+    }
     await db.orders.update_one(
         {"id": order_id},
         {"$set": {
@@ -645,12 +688,64 @@ async def set_items(order_id: str, body: OrderItemsUpdate, admin: dict = Depends
             "points_earned": pricing["points_earned"],
             "priced": True,
             "estimated_ready_at": now_utc() + timedelta(hours=ready_hours),
-        }},
+            "items_set_at": now_utc(),
+            "items_set_by": admin.get("name", ""),
+        },
+        "$push": {"item_checks": intake_check}},
     )
     fresh = await db.orders.find_one({"id": order_id})
     await notify(o["customer_id"], order_id, "Cucian sudah ditimbang",
                  f"Total {rupiah(pricing['subtotal'])}. Silakan lakukan pembayaran.", "payment")
     return order_public(fresh)
+
+
+@api.post("/orders/{order_id}/count-check")
+async def count_check(order_id: str, body: CountCheckIn, admin: dict = Depends(require_admin)):
+    """Verifikasi jumlah per jenis pakaian saat KELUAR — dibandingkan dgn catatan saat masuk."""
+    o = await db.orders.find_one({"id": order_id})
+    if not o:
+        raise HTTPException(status_code=404, detail="Pesanan tidak ditemukan")
+    if not o.get("items"):
+        raise HTTPException(status_code=400, detail="Item masuk belum diinput oleh admin cabang")
+
+    expected = {it["key"]: it["qty"] for it in o.get("items", [])}
+    actual: dict = {}
+    for it in body.items:
+        if it.key not in CATALOG_BY_KEY:
+            raise HTTPException(status_code=422, detail=f"Item tidak dikenal: {it.key}")
+        actual[it.key] = actual.get(it.key, 0) + it.qty
+
+    diffs = []
+    for k in sorted(set(expected) | set(actual)):
+        e, a = expected.get(k, 0), actual.get(k, 0)
+        if e != a:
+            diffs.append({
+                "key": k,
+                "name": CATALOG_BY_KEY.get(k, {}).get("name", k),
+                "expected": e,
+                "actual": a,
+                "diff": a - e,
+            })
+    match = not diffs
+
+    record = {
+        "id": uuid.uuid4().hex[:12],
+        "stage": body.stage,
+        "items": [{"key": k, "qty": v} for k, v in actual.items() if v > 0],
+        "match": match,
+        "diffs": diffs,
+        "checked_by": admin.get("name", ""),
+        "checked_role": admin.get("role", ""),
+        "created_at": now_utc(),
+    }
+    await db.orders.update_one({"id": order_id}, {"$push": {"item_checks": record}})
+
+    if not match:
+        detail = ", ".join(f"{d['name']} masuk {d['expected']} → keluar {d['actual']}" for d in diffs)
+        await notify(o["customer_id"], order_id, "Selisih jumlah item terdeteksi",
+                     f"Verifikasi keluar menemukan selisih: {detail}. Tim kami akan menghubungi Anda.", "order")
+
+    return {"match": match, "diffs": diffs, "check": check_public(record)}
 
 
 @api.get("/orders")

@@ -43,6 +43,8 @@ export const api = {
   scan: (code: string) => request("/orders/scan", { method: "POST", body: JSON.stringify({ code }) }),
   setItems: (id: string, body: { items: { key: string; qty: number }[]; weight_kg: number }) =>
     request(`/orders/${id}/items`, { method: "PATCH", body: JSON.stringify(body) }),
+  countCheck: (id: string, body: { items: { key: string; qty: number }[]; stage?: string }) =>
+    request(`/orders/${id}/count-check`, { method: "POST", body: JSON.stringify(body) }),
   pay: (id: string, usePoints = false) =>
     request(`/orders/${id}/pay`, { method: "POST", body: JSON.stringify({ use_points: usePoints }) }),
   setStatus: (id: string, statusValue: string) =>

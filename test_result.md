@@ -105,6 +105,20 @@
 ## user_problem_statement: "Import project dari GitHub repository laundry-tracker-63 (branch main). Setup dan install semua dependencies-nya."
 
 ## backend:
+##   - task: "Count-check masuk vs keluar (verifikasi jumlah per jenis pakaian)"
+##     implemented: true
+##     working: true
+##     file: "backend/server.py"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "set_items kini menyimpan snapshot MASUK (item_checks stage='masuk', items_set_at/by). Endpoint baru POST /orders/{id}/count-check (admin only): bandingkan jumlah aktual keluar vs masuk per jenis, simpan record (match, diffs, checked_by/role, created_at), notif pelanggan bila selisih. order_public menambah items_set_at/by, item_checks[], last_count_check. Uji curl manual PASS: snapshot masuk tercatat; check cocok -> match:true; check celana 3->2 -> match:false diffs[{Celana expected 3 actual 2 diff -1}]; customer -> 403."
+##         -working: true
+##         -agent: "testing"
+##         -comment: "TESTED ALL SCENARIOS (A-F) - ALL PASS. Scenario A: PATCH /orders/{id}/items creates MASUK snapshot (items_set_at, items_set_by, item_checks stage=masuk, match=true) ✓. Scenario B: POST count-check with SAME quantities → match=true, diffs=[], checked_by='Admin Cabang', role_label='Admin Cabang', created_at ISO ✓. Scenario C: POST count-check with DIFFERENT quantities → match=false, diffs accurate for all cases (reduce: celana 3→2 diff=-1, increase: kemeja 2→3 diff=1, extra item: kaos expected=0 actual=1 diff=1, missing item: celana expected=3 actual=0 diff=-3) ✓. Customer notification 'Selisih jumlah item terdeteksi' sent correctly ✓. Scenario D: Validation errors all correct (unknown key→422, no items→400 'Item masuk belum diinput', customer→403, no token→401) ✓. Scenario E: GET /orders/{id} returns items_set_at, items_set_by, item_checks[] (1 masuk + 5 keluar), last_count_check (most recent) ✓. Scenario F: Regression tests pass (invalid status transition→400, role enforcement→403, scan endpoint working) ✓. Minor: Demo order SUCI-0CCE3A exists but has no items set (not critical). Feature FULLY WORKING."
 ##   - task: "Import repo + install backend dependencies + verify API"
 ##     implemented: true
 ##     working: true
@@ -196,6 +210,17 @@
 ##         -comment: "GET /admin/report (admin only): total, active, completed, revenue (paid), today_orders, today_revenue, avg_rating, rating_count, by_status. Diverifikasi manual: admin 200 dgn angka benar, customer 403."
 
 ## frontend:
+##   - task: "UI verifikasi jumlah masuk vs keluar (count-check)"
+##     implemented: true
+##     working: true
+##     file: "frontend/app/admin/count-check/[id].tsx, frontend/src/components/order-items-card.tsx, frontend/app/admin/index.tsx, frontend/app/order/[id].tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: true
+##         -agent: "main"
+##         -comment: "Layar baru /admin/count-check/[id]: info masuk (jumlah, waktu, petugas, berat), stepper jumlah aktual per jenis (prefill masuk), submit -> cocok: tandai Siap; selisih: kartu merah berisi diff per jenis + tombol Hitung Ulang / Tetap Tandai Siap. Dashboard: tombol 'Tandai Siap' -> diarahkan ke layar ini ('Verifikasi & Tandai Siap'). Detail pesanan: ItemCheckCard baru (badge Sesuai/Selisih/Menunggu, meta masuk & keluar, tabel Jenis|Masuk|Keluar dengan ikon per baris). E2E visual PASS: layar count-check tampil & prefill benar; kurangi celana -> kartu selisih muncul; detail order menampilkan tabel Kemeja 2|2 OK, Celana 3|2 selisih."
 ##   - task: "Preview rincian item pesanan di setiap proses"
 ##     implemented: true
 ##     working: true
@@ -255,13 +280,15 @@
 
 ## metadata:
 ##   created_by: "main_agent"
-##   version: "1.2"
-##   test_sequence: 3
+##   version: "1.3"
+##   test_sequence: 4
 ##   run_ui: false
 
 ## test_plan:
 ##   current_focus:
-##     - "Preview rincian item pesanan di setiap proses"
+##     - "Notifications (B1)"
+##     - "Addresses CRUD (B2)"
+##     - "Admin report (B3)"
 ##     - "Notifications (B1)"
 ##     - "Addresses CRUD (B2)"
 ##     - "Admin report (B3)"
@@ -278,7 +305,11 @@
 ##     -message: "Re-verifikasi import (sesi lanjutan): /app sinkron dgn origin/main (0 ahead/0 behind), backend deps OK (fastapi/motor/uvicorn), node_modules OK (577 pkg), services RUNNING (backend, expo, mongodb), API /api/ -> {'app':'Loundry Suci','status':'ok'}, preview HTTP 200 & halaman login render sempurna. Import+setup+install: SELESAI."
 ##     -agent: "main"
 ##     -message: "Fitur baru 'Preview rincian item pesanan di setiap proses'. Tolong test FRONTEND: (1) Login admin_cuci 081200000002/admin123 -> dashboard -> 'Scan QR Pesanan' -> input manual kode order yg statusnya 'lunas' -> HARUS muncul kartu verifikasi (kode, nama pelanggan, chip status, rincian item lengkap: ikon+nama+qty+harga, berat kg x tarif, total) -> tekan 'Cocok & Tandai Dicuci' -> sukses -> tombol 'Scan Berikutnya' muncul. (2) Scan kode order yg statusnya BUKAN tahap role tsb -> rincian item tetap tampil + kotak info 'belum bisa diproses di tahap Anda' + tombol Tutup. (3) Login pelanggan 081211112222/password123 -> buka detail pesanan -> blok Rincian Item baru (ikon, chip treatment+berat, diskon, total). (4) Dashboard admin: tiap kartu ada ringkasan item 1 baris. Kredensial di /app/memory/test_credentials.md."
+##     -agent: "main"
+##     -message: "Fitur baru BACKEND 'Count-check masuk vs keluar'. Tolong test: (1) POST /api/orders/{id}/count-check sebagai admin (admin_cabang 081200000001/admin123): kirim jumlah aktual sama dgn item masuk -> match:true, diffs kosong, record tersimpan di last_count_check (stage keluar, checked_by, role_label, created_at ISO). (2) Kirim jumlah berbeda (kurang/lebih/item hilang) -> match:false, diffs berisi {key,name,expected,actual,diff} yg benar, notifikasi 'Selisih jumlah item terdeteksi' dibuat utk pelanggan (cek GET /api/notifications sbg pelanggan). (3) Validasi: item key tidak dikenal -> 422; order tanpa item masuk -> 400; customer -> 403; tanpa token -> 401/403. (4) PATCH /orders/{id}/items (set_items) kini mengisi items_set_at/by & menambah item_checks stage='masuk'. (5) GET /orders/{id} mengembalikan items_set_at, items_set_by, item_checks[], last_count_check. Kredensial di /app/memory/test_credentials.md. Order demo: SUCI-F8890C (item: kemeja x2, celana x3)."
 ##     -agent: "testing"
 ##     -message: "Bug verification complete: 'pratinjau tidak muncul' NOT REPRODUCIBLE. Preview publik berfungsi sempurna - halaman login Loundry Suci render lengkap dengan semua elemen (logo, tagline, form, tombol, akun demo). Metro bundling ~10 detik, page refresh OK, console bersih (hanya warning non-critical). Diagnosis main agent benar: user kemungkinan buka saat cold-bundle atau cache issue. Preview WORKING."
 ##     -agent: "testing"
 ##     -message: "Fitur 'Preview rincian item pesanan' VERIFIED via code review. Implementasi 100% lengkap: OrderItemsCard component dengan semua elemen (header, badge, chips, item rows, pricing, total), scan verification flow dengan kartu verifikasi + action buttons, order detail integration, admin dashboard item summary. Semua testID tersedia. Login berfungsi. E2E test tidak dapat diselesaikan penuh karena Expo web cold load 30-60 detik + timeout, tetapi code structure & logic CORRECT. Fitur siap digunakan."
+##     -agent: "testing"
+##     -message: "Count-check masuk vs keluar feature FULLY TESTED - ALL SCENARIOS PASS. Created comprehensive backend_test.py covering all requirements A-F. Scenario A (MASUK snapshot): items_set_at/by set, item_checks stage=masuk created ✓. Scenario B (match): same quantities → match=true, diffs=[], checked_by/role_label correct ✓. Scenario C (mismatch): all diff cases accurate (reduce/increase/extra/missing items), customer notification sent ✓. Scenario D (validation): unknown key→422, no items→400, customer→403, no token→401 ✓. Scenario E (GET order): all fields present (items_set_at/by, item_checks[], last_count_check) ✓. Scenario F (regression): status transitions, role enforcement, scan endpoint all working ✓. Minor: Demo order SUCI-0CCE3A has no items (not critical). Feature COMPLETE and WORKING."
