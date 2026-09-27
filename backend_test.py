@@ -9,7 +9,7 @@ import sys
 from typing import Optional
 
 # Backend URL from frontend/.env
-BASE_URL = "https://laundry-tracker-64.preview.emergentagent.com/api"
+BASE_URL = "https://clean-tracker-40.preview.emergentagent.com/api"
 
 # Test credentials
 CREDENTIALS = {

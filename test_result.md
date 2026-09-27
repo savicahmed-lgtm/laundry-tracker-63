@@ -239,3 +239,5 @@
 ##     -message: "Menambahkan alur 5 peran + scan QR + cuci ulang. Backend sudah lolos & bug admin_antar sudah diperbaiki."
 ##     -agent: "main"
 ##     -message: "B1/B2/B3 ditambahkan. Tolong test BACKEND untuk: (1) NOTIFICATIONS - buat order sbg customer 081211112222, price via admin_cabang, pay, advance status; GET /notifications harus punya notif utk tiap event & unread benar; read-all -> unread 0; read satu -> unread berkurang. (2) ADDRESSES - GET /addresses (migrasi legacy), POST tambah (is_default toggling), PATCH edit, POST /{id}/default, DELETE; pastikan selalu tepat 1 default & user.address ikut default. (3) ADMIN REPORT - GET /admin/report sbg admin (200, angka konsisten) & customer (403). Kredensial di /app/memory/test_credentials.md."
+##     -agent: "main"
+##     -message: "Re-verifikasi import (sesi lanjutan): /app sinkron dgn origin/main (0 ahead/0 behind), backend deps OK (fastapi/motor/uvicorn), node_modules OK (577 pkg), services RUNNING (backend, expo, mongodb), API /api/ -> {'app':'Loundry Suci','status':'ok'}, preview HTTP 200 & halaman login render sempurna. Import+setup+install: SELESAI."
