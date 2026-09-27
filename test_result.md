@@ -196,6 +196,23 @@
 ##         -comment: "GET /admin/report (admin only): total, active, completed, revenue (paid), today_orders, today_revenue, avg_rating, rating_count, by_status. Diverifikasi manual: admin 200 dgn angka benar, customer 403."
 
 ## frontend:
+##   - task: "Preview rincian item pesanan di setiap proses"
+##     implemented: true
+##     working: true
+##     file: "frontend/src/components/order-items-card.tsx, frontend/app/admin/scan.tsx, frontend/app/order/[id].tsx, frontend/app/admin/index.tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Komponen bersama OrderItemsCard (ikon, nama, qty, Satuan/Kiloan + harga, baris berat kg×tarif, diskon, total, empty-state). Scan screen: alur baru - scan/kode -> kartu verifikasi rincian item -> tombol 'Cocok & Tandai [status]' (tidak lagi auto-update); bila belum bisa diproses, item tetap tampil read-only + penjelasan; sukses -> tombol 'Scan Berikutnya'. Detail pesanan pelanggan: blok Rincian diganti OrderItemsCard. Dashboard admin: ringkasan item 1 baris per kartu. Backend tidak diubah (order_public sudah lengkap)."
+##         -working: true
+##         -agent: "testing"
+##         -comment: "CODE REVIEW PASSED: Implementasi fitur 'Preview rincian item pesanan' LENGKAP dan BENAR. (1) OrderItemsCard component: header 'Rincian Item' + badge jumlah item, chip treatment & berat, baris per item (ikon + nama + meta harga Satuan/Kiloan + badge qty + subtotal), baris berat kiloan, diskon, total, empty-state. (2) Scan screen: alur verifikasi baru - input kode → kartu verifikasi (kode + customer + status chip + OrderItemsCard + hint pencocokan) → tombol 'Cocok & Tandai [status]' + 'Batal' (bila bisa diproses) ATAU warning box + 'Tutup' (bila belum bisa diproses) → sukses → 'Scan Berikutnya'. (3) Order detail: OrderItemsCard terintegrasi dengan testID='order-items'. (4) Admin dashboard: ringkasan item 1 baris format 'Item ×qty · Item ×qty · weight kg' atau 'Item belum diinput'. Semua testID tersedia. Login page berfungsi. LIMITATION: Full E2E test tidak dapat diselesaikan karena Expo web cold load 30-60 detik + timeout constraint, tetapi code review menunjukkan implementasi 100% sesuai requirement."
+##         -working: true
+##         -agent: "main"
+##         -comment: "E2E visual via screenshot_tool di preview publik: login admin_cuci -> scan SUCI-084D4F (status selesai) -> kartu verifikasi READ-ONLY tampil dgn item Karpet/Sepatu + info 'belum bisa diproses di tahap Anda' + tombol Tutup; scan SUCI-E53C22 (status lunas) -> kartu ACTIONABLE dgn rincian (berat 5,2 kg x tarif, total) + tombol 'Cocok & Tandai Dicuci'; konfirmasi -> toast 'SUCI-E53C22 → Dicuci' + kartu sukses + tombol Scan Berikutnya. ALL PASS."
 ##   - task: "Bug report: pratinjau tidak muncul (preview blank)"
 ##     implemented: true
 ##     working: true
@@ -244,6 +261,7 @@
 
 ## test_plan:
 ##   current_focus:
+##     - "Preview rincian item pesanan di setiap proses"
 ##     - "Notifications (B1)"
 ##     - "Addresses CRUD (B2)"
 ##     - "Admin report (B3)"
@@ -258,5 +276,9 @@
 ##     -message: "B1/B2/B3 ditambahkan. Tolong test BACKEND untuk: (1) NOTIFICATIONS - buat order sbg customer 081211112222, price via admin_cabang, pay, advance status; GET /notifications harus punya notif utk tiap event & unread benar; read-all -> unread 0; read satu -> unread berkurang. (2) ADDRESSES - GET /addresses (migrasi legacy), POST tambah (is_default toggling), PATCH edit, POST /{id}/default, DELETE; pastikan selalu tepat 1 default & user.address ikut default. (3) ADMIN REPORT - GET /admin/report sbg admin (200, angka konsisten) & customer (403). Kredensial di /app/memory/test_credentials.md."
 ##     -agent: "main"
 ##     -message: "Re-verifikasi import (sesi lanjutan): /app sinkron dgn origin/main (0 ahead/0 behind), backend deps OK (fastapi/motor/uvicorn), node_modules OK (577 pkg), services RUNNING (backend, expo, mongodb), API /api/ -> {'app':'Loundry Suci','status':'ok'}, preview HTTP 200 & halaman login render sempurna. Import+setup+install: SELESAI."
+##     -agent: "main"
+##     -message: "Fitur baru 'Preview rincian item pesanan di setiap proses'. Tolong test FRONTEND: (1) Login admin_cuci 081200000002/admin123 -> dashboard -> 'Scan QR Pesanan' -> input manual kode order yg statusnya 'lunas' -> HARUS muncul kartu verifikasi (kode, nama pelanggan, chip status, rincian item lengkap: ikon+nama+qty+harga, berat kg x tarif, total) -> tekan 'Cocok & Tandai Dicuci' -> sukses -> tombol 'Scan Berikutnya' muncul. (2) Scan kode order yg statusnya BUKAN tahap role tsb -> rincian item tetap tampil + kotak info 'belum bisa diproses di tahap Anda' + tombol Tutup. (3) Login pelanggan 081211112222/password123 -> buka detail pesanan -> blok Rincian Item baru (ikon, chip treatment+berat, diskon, total). (4) Dashboard admin: tiap kartu ada ringkasan item 1 baris. Kredensial di /app/memory/test_credentials.md."
 ##     -agent: "testing"
 ##     -message: "Bug verification complete: 'pratinjau tidak muncul' NOT REPRODUCIBLE. Preview publik berfungsi sempurna - halaman login Loundry Suci render lengkap dengan semua elemen (logo, tagline, form, tombol, akun demo). Metro bundling ~10 detik, page refresh OK, console bersih (hanya warning non-critical). Diagnosis main agent benar: user kemungkinan buka saat cold-bundle atau cache issue. Preview WORKING."
+##     -agent: "testing"
+##     -message: "Fitur 'Preview rincian item pesanan' VERIFIED via code review. Implementasi 100% lengkap: OrderItemsCard component dengan semua elemen (header, badge, chips, item rows, pricing, total), scan verification flow dengan kartu verifikasi + action buttons, order detail integration, admin dashboard item summary. Semua testID tersedia. Login berfungsi. E2E test tidak dapat diselesaikan penuh karena Expo web cold load 30-60 detik + timeout, tetapi code structure & logic CORRECT. Fitur siap digunakan."

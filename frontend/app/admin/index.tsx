@@ -171,6 +171,13 @@ export default function AdminScreen() {
                   <Text style={styles.metaTotal}>{formatRp(item.total)}</Text>
                 </View>
 
+                <Text style={styles.itemSummary} numberOfLines={1} testID={`items-summary-${item.id}`}>
+                  {item.items?.length
+                    ? item.items.map((i: any) => `${i.name} ×${i.qty}`).join(" · ")
+                    : "Item belum diinput"}
+                  {item.weight_kg ? ` · ${item.weight_kg} kg` : ""}
+                </Text>
+
                 {item.status === "selesai" ? (
                   item.rating ? (
                     <View style={styles.ratingRow}>
@@ -262,6 +269,7 @@ const useStyles = makeStyles((colors) => ({
   progressBar: { flexDirection: "row", gap: 4 },
   seg: { flex: 1, height: 4, borderRadius: 2 },
   cardMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  itemSummary: { fontFamily: font.regular, fontSize: 12, color: colors.onSurfaceSecondary, marginTop: -spacing.sm },
   metaText: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
   metaTotal: { fontFamily: font.bold, fontSize: 15, color: colors.onSurface },
   advanceBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brandPrimary, borderRadius: radius.md, paddingVertical: spacing.md },

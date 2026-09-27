@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 
@@ -10,10 +10,9 @@ import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
 import { STATUS_META, adminAction } from "@/src/format";
 import { Button } from "@/src/components/ui";
+import { OrderItemsCard } from "@/src/components/order-items-card";
 import { queryClient } from "@/src/query-client";
 import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
-
-type Result = { code: string; label: string; customer: string } | null;
 
 export default function ScanScreen() {
   const styles = useStyles();
@@ -26,28 +25,19 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [manual, setManual] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Result>(null);
+  const [order, setOrder] = useState<any>(null);
+  const [doneLabel, setDoneLabel] = useState<string | null>(null);
   const lockRef = useRef(false);
 
+  // Cari pesanan lalu tampilkan rincian item untuk dicocokkan — status TIDAK langsung diubah.
   const process = async (raw: string) => {
     const code = raw.trim().toUpperCase();
     if (!code || busy) return;
     setBusy(true);
     try {
-      const order = await api.scan(code);
-      const action = adminAction(role, order);
-      if (!action || action.kind !== "status") {
-        toast(
-          `Pesanan ${order.code} berstatus "${STATUS_META[order.status as keyof typeof STATUS_META]?.label ?? order.status}" — belum bisa diproses di tahap Anda`,
-          "error",
-        );
-        return;
-      }
-      await api.setStatus(order.id, action.target);
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["order", order.id] });
-      setResult({ code: order.code, label: action.label, customer: order.customer_name });
-      toast(`${order.code} → ${action.label}`, "success");
+      const found = await api.scan(code);
+      setOrder(found);
+      setDoneLabel(null);
       setManual("");
     } catch (e: any) {
       toast(e.message || "Pesanan tidak ditemukan", "error");
@@ -57,6 +47,32 @@ export default function ScanScreen() {
     }
   };
 
+  // Dipanggil setelah petugas mencocokkan rincian item dengan cucian fisik.
+  const confirm = async () => {
+    if (!order) return;
+    const action = adminAction(role, order);
+    if (!action || action.kind !== "status") return;
+    setBusy(true);
+    try {
+      await api.setStatus(order.id, action.target);
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["order", order.id] });
+      setDoneLabel(action.label);
+      toast(`${order.code} → ${action.label}`, "success");
+    } catch (e: any) {
+      toast(e.message || "Gagal memperbarui status", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = () => {
+    setOrder(null);
+    setDoneLabel(null);
+    setManual("");
+    lockRef.current = false;
+  };
+
   const onBarcode = ({ data }: { data: string }) => {
     if (lockRef.current) return;
     lockRef.current = true;
@@ -64,6 +80,8 @@ export default function ScanScreen() {
   };
 
   const canUseCamera = Platform.OS !== "web" && permission?.granted;
+  const action = order ? adminAction(role, order) : null;
+  const statusMeta = order ? STATUS_META[order.status as keyof typeof STATUS_META] : null;
 
   return (
     <View style={styles.root}>
@@ -81,7 +99,7 @@ export default function ScanScreen() {
             style={{ flex: 1 }}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={busy ? undefined : onBarcode}
+            onBarcodeScanned={busy || order ? undefined : onBarcode}
           />
         ) : (
           <View style={styles.cameraFallback}>
@@ -100,12 +118,63 @@ export default function ScanScreen() {
       </View>
 
       <View style={styles.panel}>
-        {result ? (
+        {order && doneLabel ? (
           <View style={styles.resultCard} testID="scan-result">
             <Ionicons name="checkmark-circle" size={40} color={colors.success} />
-            <Text style={styles.resultTitle}>{result.code}</Text>
-            <Text style={styles.resultSub}>{result.customer} · ditandai {result.label}</Text>
+            <Text style={styles.resultTitle}>{order.code}</Text>
+            <Text style={styles.resultSub}>{order.customer_name} · ditandai {doneLabel}</Text>
+            <Button
+              title="Scan Berikutnya"
+              variant="outline"
+              icon="qr-code-outline"
+              onPress={reset}
+              testID="scan-next"
+              style={{ marginTop: spacing.sm, alignSelf: "stretch" }}
+            />
           </View>
+        ) : order ? (
+          <ScrollView style={styles.verifyScroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.verifyCard} testID="scan-verify">
+              <View style={styles.verifyHead}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.verifyCode}>{order.code}</Text>
+                  <Text style={styles.verifySub}>{order.customer_name} · {order.customer_phone}</Text>
+                </View>
+                {statusMeta ? (
+                  <View style={styles.statusChip}>
+                    <Text style={styles.statusChipText}>{statusMeta.label}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <OrderItemsCard order={order} testID="scan-items" />
+
+              <Text style={styles.matchHint}>Cocokkan rincian item di atas dengan cucian fisik sebelum menandai tahap selesai.</Text>
+
+              {action?.kind === "status" ? (
+                <>
+                  <Button
+                    title={`Cocok & Tandai ${action.label}`}
+                    icon="checkmark-done"
+                    onPress={confirm}
+                    loading={busy}
+                    testID="scan-confirm"
+                  />
+                  <Button title="Batal" variant="outline" onPress={reset} testID="scan-cancel" />
+                </>
+              ) : (
+                <>
+                  <View style={styles.warnBox}>
+                    <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+                    <Text style={styles.warnText}>
+                      Pesanan berstatus &quot;{statusMeta?.label ?? order.status}&quot; — belum bisa diproses di tahap Anda. Rincian item tetap ditampilkan untuk pencocokan.
+                    </Text>
+                  </View>
+                  <Button title="Tutup" variant="outline" onPress={reset} testID="scan-close" />
+                </>
+              )}
+            </View>
+          </ScrollView>
         ) : (
           <Text style={styles.hint}>Arahkan kamera ke QR pesanan, atau masukkan kode manual.</Text>
         )}
@@ -151,6 +220,16 @@ const useStyles = makeStyles((colors) => ({
   resultCard: { alignItems: "center", gap: spacing.xs, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.lg },
   resultTitle: { fontFamily: font.bold, fontSize: 18, color: colors.onBrandTertiary },
   resultSub: { fontFamily: font.medium, fontSize: 13, color: colors.onBrandTertiary },
+  verifyScroll: { maxHeight: 440, flexGrow: 0 },
+  verifyCard: { gap: spacing.md },
+  verifyHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  verifyCode: { fontFamily: font.bold, fontSize: 18, color: colors.onSurface },
+  verifySub: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: 2 },
+  statusChip: { backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  statusChipText: { fontFamily: font.semibold, fontSize: 11, color: colors.onSurfaceTertiary },
+  matchHint: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textAlign: "center" },
+  warnBox: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md },
+  warnText: { flex: 1, fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceSecondary },
   manualRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   manualInput: { flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, paddingHorizontal: spacing.lg, minHeight: 52, fontFamily: font.semibold, fontSize: 16, color: colors.onSurface, borderWidth: 1, borderColor: colors.border },
   manualBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },

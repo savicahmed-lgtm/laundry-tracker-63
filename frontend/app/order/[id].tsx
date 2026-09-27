@@ -13,6 +13,7 @@ import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
 import { STATUS_FLOW, STATUS_META, formatRp, formatDate, statusIndex, isAdminRole } from "@/src/format";
 import { Button, StarRating } from "@/src/components/ui";
+import { OrderItemsCard } from "@/src/components/order-items-card";
 import MapTracker from "@/src/components/map-tracker";
 import { queryClient } from "@/src/query-client";
 import { makeStyles, useTheme, spacing, radius, font } from "@/src/theme";
@@ -243,24 +244,8 @@ export default function OrderDetailScreen() {
           </View>
 
           {/* Items */}
-          <Text style={styles.sectionTitle}>Rincian ({order.items.reduce((s: number, i: any) => s + i.qty, 0)} item)</Text>
-          <View style={styles.itemsCard}>
-            {order.items.map((it: any) => (
-              <View key={it.key} style={styles.itemLine}>
-                <Text style={styles.itemName}>{it.name} × {it.qty}</Text>
-                <Text style={styles.itemPrice}>{formatRp(it.price * it.qty)}</Text>
-              </View>
-            ))}
-            {order.discount > 0 ? (
-              <View style={styles.itemLine}>
-                <Text style={[styles.itemName, { color: colors.brandPrimary }]}>Diskon poin</Text>
-                <Text style={[styles.itemPrice, { color: colors.brandPrimary }]}>- {formatRp(order.discount)}</Text>
-              </View>
-            ) : null}
-            <View style={[styles.itemLine, styles.totalLine]}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{formatRp(order.total)}</Text>
-            </View>
+          <View style={{ marginTop: spacing.lg }}>
+            <OrderItemsCard order={order} testID="order-items" />
           </View>
 
           {/* Photos */}
