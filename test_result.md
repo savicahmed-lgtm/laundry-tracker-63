@@ -196,6 +196,23 @@
 ##         -comment: "GET /admin/report (admin only): total, active, completed, revenue (paid), today_orders, today_revenue, avg_rating, rating_count, by_status. Diverifikasi manual: admin 200 dgn angka benar, customer 403."
 
 ## frontend:
+##   - task: "Bug report: pratinjau tidak muncul (preview blank)"
+##     implemented: true
+##     working: true
+##     file: "frontend/app/index.tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "user"
+##         -comment: "User melaporkan: 'pratinjau belum muncul'."
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Diagnosis: expo RUNNING, Metro 'Web Bundled 8591ms' sukses, localhost:3000 HTTP 200, proxy publik clean-tracker-40.preview.emergentagent.com HTTP 200, screenshot via URL proxy menunjukkan halaman login render sempurna. Dugaan: user membuka preview saat Metro masih cold-bundle setelah restart (butuh 20-30+ dtk) atau cache browser. Tidak ada perubahan kode. Perlu verifikasi testing agent bahwa preview publik memuat halaman login Loundry Suci."
+##         -working: true
+##         -agent: "testing"
+##         -comment: "VERIFIED: Preview publik https://clean-tracker-40.preview.emergentagent.com berhasil memuat halaman login dengan SEMPURNA. Tested dengan mobile viewport (390x844). Metro bundling selesai dalam ~10 detik, konten render lengkap. Semua elemen login tampil: logo 'Loundry Suci', tagline 'Cucian bersih, wangi & terlacak', form Masuk dengan input Nomor HP dan Password, tombol Masuk hijau, link Daftar, dan kotak Akun demo berisi 6 akun (Pelanggan, Admin Cabang, Admin Cuci, Admin Setrika, Admin Kurir, Super Admin). Page refresh tetap render dengan baik. Console hanya menunjukkan warning non-critical (shadow props deprecated, 401 /auth/me yang expected saat belum login, Cloudflare analytics). BUG NOT REPRODUCIBLE - preview berfungsi normal. Main agent diagnosis benar: user kemungkinan membuka saat cold-bundle atau cache issue."
 ##   - task: "Install frontend dependencies + verify Expo preview"
 ##     implemented: true
 ##     working: true
@@ -222,7 +239,7 @@
 ## metadata:
 ##   created_by: "main_agent"
 ##   version: "1.2"
-##   test_sequence: 2
+##   test_sequence: 3
 ##   run_ui: false
 
 ## test_plan:
@@ -241,3 +258,5 @@
 ##     -message: "B1/B2/B3 ditambahkan. Tolong test BACKEND untuk: (1) NOTIFICATIONS - buat order sbg customer 081211112222, price via admin_cabang, pay, advance status; GET /notifications harus punya notif utk tiap event & unread benar; read-all -> unread 0; read satu -> unread berkurang. (2) ADDRESSES - GET /addresses (migrasi legacy), POST tambah (is_default toggling), PATCH edit, POST /{id}/default, DELETE; pastikan selalu tepat 1 default & user.address ikut default. (3) ADMIN REPORT - GET /admin/report sbg admin (200, angka konsisten) & customer (403). Kredensial di /app/memory/test_credentials.md."
 ##     -agent: "main"
 ##     -message: "Re-verifikasi import (sesi lanjutan): /app sinkron dgn origin/main (0 ahead/0 behind), backend deps OK (fastapi/motor/uvicorn), node_modules OK (577 pkg), services RUNNING (backend, expo, mongodb), API /api/ -> {'app':'Loundry Suci','status':'ok'}, preview HTTP 200 & halaman login render sempurna. Import+setup+install: SELESAI."
+##     -agent: "testing"
+##     -message: "Bug verification complete: 'pratinjau tidak muncul' NOT REPRODUCIBLE. Preview publik berfungsi sempurna - halaman login Loundry Suci render lengkap dengan semua elemen (logo, tagline, form, tombol, akun demo). Metro bundling ~10 detik, page refresh OK, console bersih (hanya warning non-critical). Diagnosis main agent benar: user kemungkinan buka saat cold-bundle atau cache issue. Preview WORKING."
