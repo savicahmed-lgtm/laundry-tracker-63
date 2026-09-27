@@ -12,6 +12,6 @@ def reset_demo_state():
     """Ensure demo customer has >=30 points before session begins so redemption tests work."""
     mongo = MongoClient(os.environ["MONGO_URL"])
     db = mongo[os.environ["DB_NAME"]]
-    db.users.update_one({"phone": "081211112222"}, {"$set": {"points": 30}})
+    db.users.update_one({"phone": "081211112222"}, {"$set": {"points": 100}})
     yield
     mongo.close()

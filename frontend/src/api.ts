@@ -40,12 +40,47 @@ export const api = {
   createOrder: (body: any) => request("/orders", { method: "POST", body: JSON.stringify(body) }),
   orders: () => request("/orders"),
   order: (id: string) => request(`/orders/${id}`),
-  pay: (id: string) => request(`/orders/${id}/pay`, { method: "POST" }),
+  scan: (code: string) => request("/orders/scan", { method: "POST", body: JSON.stringify({ code }) }),
+  setItems: (id: string, body: { items: { key: string; qty: number }[]; weight_kg: number }) =>
+    request(`/orders/${id}/items`, { method: "PATCH", body: JSON.stringify(body) }),
+  pay: (id: string, usePoints = false) =>
+    request(`/orders/${id}/pay`, { method: "POST", body: JSON.stringify({ use_points: usePoints }) }),
   setStatus: (id: string, statusValue: string) =>
     request(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: statusValue }) }),
   courier: (id: string) => request(`/orders/${id}/courier`),
   feedback: (id: string, body: { rating: number; comment: string }) =>
     request(`/orders/${id}/feedback`, { method: "POST", body: JSON.stringify(body) }),
+  addPhotos: (id: string, paths: string[]) =>
+    request(`/orders/${id}/photos`, { method: "POST", body: JSON.stringify({ paths }) }),
+  promos: () => request("/promos"),
+  pointsHistory: () => request("/points/history"),
 };
+
+// Build an authenticated image URL (token in query so <Image> works on web too).
+export async function fileUrl(path: string): Promise<string> {
+  const token = await getToken();
+  return `${BASE}/api/files/${path}?token=${token ?? ""}`;
+}
+
+// Upload a picked image (branches body shape for web vs native).
+export async function uploadImage(uri: string, name: string, type: string): Promise<string> {
+  const token = await getToken();
+  const form = new FormData();
+  if (typeof document !== "undefined") {
+    const blob = await (await fetch(uri)).blob();
+    form.append("file", blob, name);
+  } else {
+    form.append("file", { uri, name, type } as any);
+  }
+  const res = await fetch(`${BASE}/api/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data?.detail || "Gagal mengunggah");
+  return data.path as string;
+}
 
 export { request };

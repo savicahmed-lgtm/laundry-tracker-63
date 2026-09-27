@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 2 — validated the 4 new features (promos, points history, estimated ready, laundry photos via Emergent Object Storage) plus regression on iteration 1 flows. Backend: 40/40 pytest cases pass (27 regression + 13 new). New file /app/backend/tests/test_new_features.py covers: promos public + shape (>=3 seeded), points/history auth+shape + BOTH earn & redeem txns appended atomically on /pay (balance = before - 25 + earned), estimated_ready_at is ISO on create & persisted on GET, /upload requires auth, /files/{path} 401 without token / 200 with ?token= AND with Authorization header, customer forbidden (403) on /orders/{id}/photos, admin can add photos (photos appended, customer sees them, 404 on unknown order). Frontend (mobile 390x844): customer login → home shows 3 promo banners (testID promo-*), points card tap navigates to /points-history with balance (53 poin) + earn/redeem rows rendered; profile-points-pill also navigates; tracking screen for unpaid order shows estimate-ready ('Estimasi selesai 28 Sep 2026, 01.19'), pay-button visible, no photo-camera/gallery for customer; after admin adds photo via API, admin sees photo-camera + photo-gallery buttons and laundry-photo thumb, and customer sees the same laundry-photo thumb after refetch. Also fixed one iteration-1 test flake by bumping demo customer points reset from 30 → 100 in conftest so the new redeem-on-pay test isn't skipped when running the full suite in parallel.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/orders + GET /api/orders/{id}", "issue": "estimated_ready_at returned tz-aware on create but tz-naive on subsequent GET (Mongo persists datetime without tzinfo). Frontend JS Date parses both fine, so no functional impact — same pattern already patched for siap_at. Consider normalizing all datetime reads through a helper that re-attaches UTC (like courier endpoint does for siap_at)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Recurring console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Non-blocking (RN 0.79+). Reference: usages inside makeStyles across screens."},
+      {"component": "props.pointerEvents", "issue": "Recurring console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Likely emitted by react-native-maps web shim or gesture-handler. Non-blocking."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_loundry.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "Optional: normalize datetime read-path so estimated_ready_at (and any future datetime field) is tz-aware in every response (reuse the pattern applied to siap_at).",
+    "Optional: migrate remaining shadow* style props to boxShadow to silence RN warnings."
+  ],
+  "critical_code_review_comments": [
+    "server.py: /orders POST and /orders/{id}/pay atomically insert two point_txns rows and update user.points via $inc — solid pattern; no race window in single-request path.",
+    "server.py: /upload correctly caps 8MB, restricts extensions, isolates storage path by user id (loundry-suci/uploads/{user_id}/{uuid}.{ext}).",
+    "server.py: /files/{path} accepts token via BOTH Authorization header and ?token= query, letting <Image src=..> work without custom fetch — good.",
+    "server.py: /orders/{id}/photos correctly guarded by require_admin (customer path returns 403 verified in test).",
+    "Frontend order/[id].tsx: renders estimate-ready only when order.status !== 'selesai' AND estimated_ready_at present — matches spec.",
+    "Frontend points-history.tsx: 93 lines, well-scoped; uses useFocusEffect + refetch to keep balance in sync after navigating back from pay flow."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new — 13 tests covering promos, points/history, estimated_ready, photos+object storage)",
+    "/app/backend/tests/conftest.py (bumped demo customer reset points 30 → 100 so parallel redemption tests don't skip)"
+  ],
+  "success_rate": {"backend": "100% (40/40)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "conftest resets demo customer (081211112222) points to 100 at session start. Tests create ephemeral orders + photos in Emergent Object Storage under loundry-suci/uploads/{user_id}/... (not cleaned up; scoped by user id, safe).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/ -v (uses xdist 2 workers by default per pytest.ini; deterministic thanks to session-level points reset). Frontend: on web preview, expo-image-picker cannot actually open camera/gallery in headless browser — this is expected per problem statement; verify admin photo endpoint + button rendering via API/testID query (already done here). For end-to-end photo flow in UI, use the /api/upload + /api/orders/{id}/photos API path (as done in test_new_features.py::TestPhotos and in the playwright flow_3).",
+  "rca_of_issue": "N/A — no bugs introduced this iteration. Only a minor test-suite improvement (points reset value increased) to keep the new redemption test deterministic under parallel execution."
+}

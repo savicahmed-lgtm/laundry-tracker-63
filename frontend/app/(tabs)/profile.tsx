@@ -43,10 +43,11 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.name}>{user?.name}</Text>
           <Text style={styles.phone}>{user?.phone}</Text>
-          <View style={styles.pointsPill}>
+          <Pressable style={styles.pointsPill} onPress={() => router.push("/points-history")} testID="profile-points-pill">
             <Ionicons name="gift" size={16} color={colors.onBrandTertiary} />
             <Text style={styles.pointsPillText}>{points} poin · {Math.floor(points / 25)} kg gratis</Text>
-          </View>
+            <Ionicons name="chevron-forward" size={14} color={colors.onBrandTertiary} />
+          </Pressable>
         </View>
 
         <View style={styles.section}>

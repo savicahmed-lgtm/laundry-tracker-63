@@ -9,14 +9,19 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.laundrytracker.d5lyxu"
+      "bundleIdentifier": "com.emergent.laundrytracker.d5lyxu",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Foto cucian pelanggan saat diterima",
+        "NSPhotoLibraryUsageDescription": "Pilih foto cucian dari galeri"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.emergent.laundrytracker.d5lyxu"
+      "package": "com.emergent.laundrytracker.d5lyxu",
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
     },
     "web": {
       "bundler": "metro",

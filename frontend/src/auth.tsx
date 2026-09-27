@@ -8,7 +8,8 @@ export type User = {
   name: string;
   address: string;
   points: number;
-  role: "customer" | "admin";
+  role: "customer" | "admin" | "admin_cabang" | "admin_cuci" | "admin_setrika" | "admin_antar";
+  role_label: string;
 };
 
 type AuthContextValue = {

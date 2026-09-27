@@ -1,14 +1,16 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 
-import { api } from "@/src/api";
+import { api, fileUrl, uploadImage } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/toast";
-import { STATUS_FLOW, STATUS_META, formatRp, statusIndex } from "@/src/format";
+import { STATUS_FLOW, STATUS_META, formatRp, formatDate, statusIndex } from "@/src/format";
 import { Button, StarRating } from "@/src/components/ui";
 import MapTracker from "@/src/components/map-tracker";
 import { queryClient } from "@/src/query-client";
@@ -19,11 +21,13 @@ export default function OrderDetailScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const toast = useToast();
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const isAdmin = user?.role === "admin";
 
   const orderQ = useQuery({
     queryKey: ["order", id],
@@ -58,6 +62,38 @@ export default function OrderDetailScreen() {
     },
     onError: (e: any) => toast(e.message || "Gagal mengirim ulasan", "error"),
   });
+
+  const pickAndUpload = async (fromCamera: boolean) => {
+    const perm = fromCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      if (!perm.canAskAgain) {
+        toast("Izin ditolak. Buka Pengaturan untuk mengaktifkan.", "error");
+        Linking.openSettings();
+      } else {
+        toast("Izin diperlukan untuk menambah foto", "error");
+      }
+      return;
+    }
+    const res = fromCamera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.6 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.6 });
+    if (res.canceled || !res.assets?.length) return;
+    const asset = res.assets[0];
+    setUploading(true);
+    try {
+      const name = asset.fileName || `laundry-${Date.now()}.jpg`;
+      const path = await uploadImage(asset.uri, name, asset.mimeType || "image/jpeg");
+      await api.addPhotos(id!, [path]);
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast("Foto berhasil ditambahkan", "success");
+    } catch (e: any) {
+      toast(e.message || "Gagal mengunggah foto", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (orderQ.isLoading || !order) {
     return (
@@ -108,6 +144,16 @@ export default function OrderDetailScreen() {
             <Text style={styles.total}>{formatRp(order.total)}</Text>
           </View>
 
+          {order.estimated_ready_at && order.status !== "selesai" ? (
+            <View style={styles.estimateBox} testID="estimate-ready">
+              <Ionicons name="time-outline" size={20} color={colors.brandPrimary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.estimateLabel}>Estimasi selesai</Text>
+                <Text style={styles.estimateValue}>{formatDate(order.estimated_ready_at)}</Text>
+              </View>
+            </View>
+          ) : null}
+
           {/* Timeline */}
           <View style={styles.timeline}>
             {STATUS_FLOW.map((s, i) => {
@@ -152,6 +198,37 @@ export default function OrderDetailScreen() {
               <Text style={styles.totalValue}>{formatRp(order.total)}</Text>
             </View>
           </View>
+
+          {/* Photos */}
+          {(isAdmin || order.photos?.length > 0) ? (
+            <View style={styles.photoSection}>
+              <View style={styles.photoHeader}>
+                <Text style={styles.sectionTitle}>Foto Cucian</Text>
+                {isAdmin ? (
+                  <View style={styles.photoActions}>
+                    <Pressable onPress={() => pickAndUpload(true)} style={styles.photoBtn} testID="photo-camera" disabled={uploading}>
+                      <Ionicons name="camera" size={18} color={colors.brandPrimary} />
+                    </Pressable>
+                    <Pressable onPress={() => pickAndUpload(false)} style={styles.photoBtn} testID="photo-gallery" disabled={uploading}>
+                      <Ionicons name="image" size={18} color={colors.brandPrimary} />
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+              {uploading ? (
+                <View style={styles.photoLoading}><ActivityIndicator color={colors.brandPrimary} /><Text style={styles.photoLoadingText}>Mengunggah...</Text></View>
+              ) : null}
+              {order.photos?.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+                  {order.photos.map((p: string, i: number) => <PhotoThumb key={p + i} path={p} />)}
+                </ScrollView>
+              ) : (
+                <Text style={styles.photoEmpty}>
+                  {isAdmin ? "Tambahkan foto cucian agar pelanggan tenang" : "Belum ada foto"}
+                </Text>
+              )}
+            </View>
+          ) : null}
 
           {/* Payment */}
           {order.status === "diterima" ? (
@@ -203,6 +280,21 @@ export default function OrderDetailScreen() {
   );
 }
 
+function PhotoThumb({ path }: { path: string }) {
+  const styles = useStyles();
+  const [uri, setUri] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fileUrl(path).then((u) => alive && setUri(u));
+    return () => { alive = false; };
+  }, [path]);
+  return (
+    <View style={styles.thumb} testID="laundry-photo">
+      {uri ? <Image source={{ uri }} style={styles.thumbImg} contentFit="cover" /> : null}
+    </View>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
@@ -216,6 +308,18 @@ const useStyles = makeStyles((colors) => ({
   orderId: { fontFamily: font.bold, fontSize: 18, color: colors.onSurface },
   orderService: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: 2 },
   total: { fontFamily: font.bold, fontSize: 20, color: colors.brandPrimary },
+  estimateBox: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.brandTertiary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.lg },
+  estimateLabel: { fontFamily: font.regular, fontSize: 12, color: colors.onBrandTertiary },
+  estimateValue: { fontFamily: font.semibold, fontSize: 15, color: colors.onBrandTertiary, marginTop: 2 },
+  photoSection: { marginTop: spacing.md },
+  photoHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  photoActions: { flexDirection: "row", gap: spacing.sm },
+  photoBtn: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
+  photoLoading: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginVertical: spacing.sm },
+  photoLoadingText: { fontFamily: font.regular, fontSize: 13, color: colors.muted },
+  photoEmpty: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: spacing.xs },
+  thumb: { width: 100, height: 100, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surfaceTertiary },
+  thumbImg: { width: "100%", height: "100%" },
   timeline: { marginBottom: spacing.lg },
   tlRow: { flexDirection: "row", alignItems: "flex-start" },
   tlLeft: { alignItems: "center", width: 40 },

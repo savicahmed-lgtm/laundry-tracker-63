@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 
@@ -23,6 +24,7 @@ export default function HomeScreen() {
 
   const catalogQ = useQuery({ queryKey: ["catalog"], queryFn: api.catalog });
   const ordersQ = useQuery({ queryKey: ["orders"], queryFn: api.orders });
+  const promosQ = useQuery({ queryKey: ["promos"], queryFn: api.promos });
 
   useFocusEffect(
     useCallback(() => {
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const freeKg = Math.floor(points / 25);
   const items = catalogQ.data?.items ?? [];
   const active = (ordersQ.data ?? []).find((o: any) => o.status !== "selesai");
+  const promos = promosQ.data ?? [];
 
   const onRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -60,6 +63,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Points card */}
+        <Pressable onPress={() => router.push("/points-history")} testID="home-points-card">
         <LinearGradient colors={[colors.brandPrimary, colors.brandSecondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.pointsCard}>
           <View style={styles.pointsRow}>
             <View>
@@ -74,10 +78,43 @@ export default function HomeScreen() {
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${points >= 25 ? 100 : ((points % 25) / 25) * 100}%` }]} />
           </View>
-          <Text style={styles.pointsHint}>
-            {toFree === 0 ? "Anda punya kupon 1 kg gratis!" : `${toFree} poin lagi untuk 1 kg gratis`}
-          </Text>
+          <View style={styles.pointsFooter}>
+            <Text style={styles.pointsHint}>
+              {toFree === 0 ? "Anda punya kupon 1 kg gratis!" : `${toFree} poin lagi untuk 1 kg gratis`}
+            </Text>
+            <View style={styles.pointsHistoryLink}>
+              <Text style={styles.pointsHistoryText}>Riwayat</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.onBrandPrimary} />
+            </View>
+          </View>
         </LinearGradient>
+        </Pressable>
+
+        {/* Promo banners */}
+        {promos.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.promoRow}
+            style={{ marginTop: spacing.lg }}
+          >
+            {promos.map((p: any) => (
+              <View key={p.id} style={styles.promoCard} testID={`promo-${p.id}`}>
+                <Image source={{ uri: p.image }} style={styles.promoImg} contentFit="cover" />
+                <LinearGradient colors={["rgba(6,95,70,0.15)", "rgba(17,24,39,0.85)"]} style={styles.promoScrim} />
+                {p.badge ? (
+                  <View style={styles.promoBadge}>
+                    <Text style={styles.promoBadgeText}>{p.badge}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.promoText}>
+                  <Text style={styles.promoTitle} numberOfLines={2}>{p.title}</Text>
+                  <Text style={styles.promoSub} numberOfLines={1}>{p.subtitle}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        ) : null}
 
         {/* Active order */}
         {active ? (
@@ -159,6 +196,18 @@ const useStyles = makeStyles((colors) => ({
   progressTrack: { height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.28)", overflow: "hidden" },
   progressFill: { height: 8, borderRadius: 4, backgroundColor: colors.onBrandPrimary },
   pointsHint: { fontFamily: font.medium, fontSize: 12, color: colors.onBrandPrimary, opacity: 0.95 },
+  pointsFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  pointsHistoryLink: { flexDirection: "row", alignItems: "center", gap: 2 },
+  pointsHistoryText: { fontFamily: font.semibold, fontSize: 12, color: colors.onBrandPrimary },
+  promoRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
+  promoCard: { width: 280, height: 130, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceTertiary },
+  promoImg: { ...({ position: "absolute" } as any), top: 0, left: 0, right: 0, bottom: 0 },
+  promoScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  promoBadge: { position: "absolute", top: spacing.md, right: spacing.md, backgroundColor: colors.warning, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill },
+  promoBadgeText: { fontFamily: font.bold, fontSize: 12, color: colors.onWarning },
+  promoText: { position: "absolute", left: spacing.lg, right: spacing.lg, bottom: spacing.md },
+  promoTitle: { fontFamily: font.bold, fontSize: 16, color: "#FFFFFF" },
+  promoSub: { fontFamily: font.regular, fontSize: 12, color: "#FFFFFF", opacity: 0.9, marginTop: 2 },
   activeCard: {
     flexDirection: "row",
     alignItems: "center",
